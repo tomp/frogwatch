@@ -1,0 +1,8 @@
+[MESSAGES CONTROL]
+disable=invalid-name,
+        bad-continuation,
+        bad-indentation,
+        bad-whitespace,
+        too-few-public-methods,
+        logging-fstring-interpolation,
+        logging-not-lazy,
