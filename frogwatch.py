@@ -8,10 +8,15 @@ Created: March 2021
 import sys
 import json
 import argparse
+import logging
 
 import requests
 
+# logging
+logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
+logger = logging.getLogger()
 
+# constants
 API_PREFIX = "https://frogwatch.next.fieldscope.org/api/v3/"
 QUERY_URL = API_PREFIX + "schema/frogwatch/query?f=json"
 
@@ -140,21 +145,39 @@ FILTERS = [
   }
 ]
 
-def query_body():
+def query_body(fields: list[str] = ALL_FIELDS):
     """Return the body to be used in the frogwatch query."""
-    return {"fields": OBS_FIELDS, "filters": FILTERS}
+    return {"fields": fields, "filters": FILTERS}
 
 def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
     parser = argparse.ArgumentParser()
+    parser.add_argument("--debug", action="store_true",
+            help="Produce debugging output")
     opt = parser.parse_args()
     return opt
 
 def main() -> int:
     """The toplevel function.  An exitcode is returned."""
+    opt = parse_args()
+    if opt.debug:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("[debug mode]")
 
-    resp = requests.post(QUERY_URL, json=query_body())
-    print(json.dumps(resp.json(), indent=4))
+    query = query_body(fields=OBS_FIELDS)
+    resp = requests.post(QUERY_URL, json=query)
+    logger.debug(json.dumps(resp.json(), indent=4))
+    
+    stations = {}
+    obs_count = 0
+    for item in resp.json()["result"]:
+        station_id = item["stationId"]
+        station_name = item["stationName"]
+        stations[station_id] = station_name
+        obs_count += len(item["observations"])
+
+    logger.info(f"{obs_count} observations from {len(stations)} stations")
+
 
 
 if __name__ == "__main__":
