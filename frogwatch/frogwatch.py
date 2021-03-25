@@ -5,150 +5,138 @@ Retrieve Frogwatch data using the Fieldscope API.
 Author: Tom Pollard
 Created: March 2021
 """
-from typing import Any, Optional
 import sys
 import json
+from datetime import datetime, time
+from dataclasses import dataclass
 import argparse
 import logging
 
 import requests
 
+from .version import __version__
+from .fieldscope import (query_body, OBS_FIELDS, QUERY_URL)
+
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
 logger = logging.getLogger()
 
-# constants
-API_PREFIX = "https://frogwatch.next.fieldscope.org/api/v3/"
-QUERY_URL = API_PREFIX + "schema/frogwatch/query?f=json"
+# models
+#pylint: disable=too-many-instance-attributes
 
-ALL_FIELDS = [
-    "City",
-    "County",
-    "State",
-    "FrogWatch_LandUse",
-    "FrogWatch_Habitat",
-    "FrogWatch_WetlandOrigin",
-    "FrogWatch_WaterPresence",
-    "FrogWatch_WaterSource",
-    "Description",
-    "DirectionsToSite",
-    "StartTime",
-    "EndTime",
-    "AirTemperature",
-    "BeaufortWind",
-    "FrogWatch_Precipitation",
-    "FrogWatch_PrecipitationLast48",
-    "FrogWatch_AboveFreezingLast48",
-    "FrogWatch_SpeciesId",
-    "FrogWatch_CallIntensity",
-    "Notes",
-]
+FS_id = str
 
-OBS_FIELDS = [
-    "City",
-    "County",
-    "State",
-    "StartTime",
-    "EndTime",
-    "AirTemperature",
-    "BeaufortWind",
-    "FrogWatch_Precipitation",
-    "FrogWatch_PrecipitationLast48",
-    "FrogWatch_AboveFreezingLast48",
-    "FrogWatch_SpeciesId",
-    "FrogWatch_CallIntensity",
-    "Notes",
-]
+@dataclass
+class Station():
+    """A Station is a location from which observations are reported."""
+    fs_id: FS_id    # the Fieldscope id for this station
+    name: str       # the station name
+    lon: float      # longitude in decinmal degrees
+    lat: float      # latitude in decimal degrees
+    city: str       # the station's city
+    county: str     # the station's county
+    state: str      # the station's state
+    owner: "Person" # the station "owner"
 
 
-SMR_CIRCLE = [
-    [-74.29012826552825, 40.791803637617120],
-    [-74.28499313592775, 40.791612530497130],
-    [-74.27990754836033, 40.791041052884930],
-    [-74.27492056435436, 40.790094718141070],
-    [-74.27008028918730, 40.788782655767490],
-    [-74.26543340560549, 40.787117522877160],
-    [-74.26102472161640, 40.785115381480780],
-    [-74.25689673680961, 40.782795542803900],
-    [-74.25308923146618, 40.780180380172574],
-    [-74.24963888247464, 40.777295112313160],
-    [-74.24657890979006, 40.774167559201120],
-    [-74.24393875685270, 40.770827872859280],
-    [-74.24174380803031, 40.767308245747590],
-    [-74.24001514576600, 40.763642599600125],
-    [-74.23876934970794, 40.759866257749344],
-    [-74.23801833967106, 40.756015604131530],
-    [-74.23776926384174, 40.752127732288230],
-    [-74.23802443318601, 40.748240087767186],
-    [-74.23878130256790, 40.744390107380276],
-    [-74.24003249863001, 40.740614858797220],
-    [-74.24176589403852, 40.736950683940750],
-    [-74.24396472725326, 40.733432849602510],
-    [-74.24660776655601, 40.730095208621400],
-    [-74.24966951665739, 40.726969874855410],
-    [-74.25312046581168, 40.724086915039210],
-    [-74.25692737099948, 40.721474060451435],
-    [-74.26105357839549, 40.719156441121640],
-    [-74.26545937602323, 40.717156345087540],
-    [-74.27010237521411, 40.715493004972494],
-    [-74.27493791723556, 40.714182413891706],
-    [-74.27991950123344, 40.713237172417124],
-    [-74.28499922944984, 40.712666368036864],
-    [-74.29012826552825, 40.712475488239484],
-    [-74.29525730160667, 40.712666368036864],
-    [-74.30033702982308, 40.713237172417124],
-    [-74.30531861382096, 40.714182413891706],
-    [-74.31015415584240, 40.715493004972494],
-    [-74.31479715503329, 40.717156345087540],
-    [-74.31920295266102, 40.719156441121640],
-    [-74.32332916005704, 40.721474060451435],
-    [-74.32713606524484, 40.724086915039210],
-    [-74.33058701439913, 40.726969874855410],
-    [-74.33364876450051, 40.730095208621400],
-    [-74.33629180380326, 40.733432849602510],
-    [-74.33849063701800, 40.736950683940750],
-    [-74.34022403242649, 40.740614858797220],
-    [-74.34147522848862, 40.744390107380276],
-    [-74.34223209787051, 40.748240087767186],
-    [-74.34248726721478, 40.752127732288230],
-    [-74.34223819138546, 40.756015604131530],
-    [-74.34148718134858, 40.759866257749344],
-    [-74.34024138529053, 40.763642599600125],
-    [-74.33851272302621, 40.767308245747590],
-    [-74.33631777420382, 40.770827872859280],
-    [-74.33367762126646, 40.774167559201120],
-    [-74.33061764858188, 40.777295112313160],
-    [-74.32716729959034, 40.780180380172574],
-    [-74.32335979424691, 40.782795542803900],
-    [-74.31923180944013, 40.785115381480780],
-    [-74.31482312545103, 40.787117522877160],
-    [-74.31017624186921, 40.788782655767490],
-    [-74.30533596670215, 40.790094718141070],
-    [-74.30034898269618, 40.791041052884930],
-    [-74.29526339512876, 40.791612530497130],
-    [-74.29012826552825, 40.791803637617120],
-]
-
-FILTERS = [
-    "and",
-    {
-        "within": {
-            "sourceId": "circle",
-            "rings": [SMR_CIRCLE],
-            "spatialReference": {"wkid": 4326},
-        },
-        "enabled": True,
-        "label": "Filter by area",
-    },
-]
+@dataclass
+class Person():
+    """A Person is a station owner or an observer."""
+    fs_id: FS_id    # the fieldscope id for this person
+    first_name: str # their first name
+    last_name: str  # their last name
+    email: str      # their email address
 
 
-def query_body(fields: Optional[list[str]]) -> dict[str, Any]:
-    """Return the body to be used in the frogwatch query."""
-    return {
-        "fields": fields or ALL_FIELDS,
-        "filters": FILTERS,
-    }
+@dataclass
+class Observation():
+    """An Observation is an observation of a single frog species at a specific
+    time and location.
+    """
+    fs_id: FS_id          # the fieldscope id for this observation
+    station: "Station"    # the station where the observation was made
+    observer: "Person"    # the person who reported the observation
+    start_time: datetime  # the beginning of the observation period
+    end_time: datetime    # the end of the observation period
+    species_id: str
+    call_intensity: int
+    temperature: float
+    beaufort_wind: int
+    precip_48h: int
+    precip: int
+    above_freezing_48h: bool
+    notes: str
+
+
+def load_result(
+        item: dict,
+        stations: dict[FS_id, Station],
+        observations: dict[FS_id, Observation],
+        people: dict[FS_id, Person]
+) -> None:
+    """Extract observations from the given query result item and save information
+    about the station, the observations, and the observers in the given maps.
+    Each item represents the observations for a single station.
+    """
+    station_owner = Person(
+        fs_id=item["owner2"]["ownerId"],
+        first_name=item["owner2"]["firstName"],
+        last_name=item["owner2"]["lastName"],
+        email=item["owner2"]["email"],
+    )
+    people[station_owner.fs_id] = station_owner
+
+    station = Station(
+        fs_id=item["stationId"],
+        name=item["stationName"],
+        lon=float(item["geometry"]["x"]),
+        lat=float(item["geometry"]["y"]),
+        city=item["attributes"]["City"],
+        county=item["attributes"]["County"],
+        state=item["attributes"]["State"],
+        owner=station_owner,
+    )
+    stations[station.fs_id] = station
+
+    for obs in item["observations"]:
+        attrs = obs["attributes"]
+
+        observer = Person(
+            fs_id=obs["owner"]["ownerId"],
+            first_name=obs["owner"]["firstName"],
+            last_name=obs["owner"]["lastName"],
+            email=obs["owner"]["email"],
+        )
+        people[observer.fs_id] = observer
+
+        obs_date = datetime.fromisoformat(obs["collectionDate"]).date()
+        f = attrs["StartTime"]
+        start_time = datetime.combine(
+                date=obs_date,
+                time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
+        )
+        f = attrs["EndTime"]
+        end_time = datetime.combine(
+                date=obs_date,
+                time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
+        )
+
+        observation = Observation(
+            fs_id=obs["observationId"],
+            station=station,
+            observer=observer,
+            start_time=start_time,
+            end_time=end_time,
+            species_id=attrs["FrogWatch_SpeciesId"],
+            call_intensity=int(attrs["FrogWatch_CallIntensity"]),
+            temperature=int(attrs["AirTemperature"]),
+            beaufort_wind=int(attrs["BeaufortWind"]),
+            precip_48h=int(attrs["FrogWatch_PrecipitationLast48"]),
+            precip=int(attrs["FrogWatch_Precipitation"]),
+            above_freezing_48h=int(attrs["FrogWatch_AboveFreezingLast48"]),
+            notes=attrs["FrogWatch_SpeciesId"],
+        )
+        observations[observation.fs_id] = observation
 
 
 def parse_args():
@@ -170,15 +158,13 @@ def main() -> int:
     resp = requests.post(QUERY_URL, json=query)
     logger.debug(json.dumps(resp.json(), indent=4))
 
-    stations = {}
-    obs_count = 0
-    for item in resp.json()["result"]:
-        station_id = item["stationId"]
-        station_name = item["stationName"]
-        stations[station_id] = station_name
-        obs_count += len(item["observations"])
+    stations: dict[FS_id, Station] = {}
+    observations: dict[FS_id, Observation] = {}
+    people: dict[FS_id, Person] = {}
 
-    logger.info(f"{obs_count} observations from {len(stations)} stations")
+    for item in resp.json()["result"]:
+        load_result(item, stations, observations, people)
+    logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
 
 if __name__ == "__main__":
