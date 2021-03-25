@@ -9,6 +9,7 @@ import sys
 import json
 from datetime import datetime, time
 from dataclasses import dataclass
+from operator import attrgetter
 import argparse
 import logging
 
@@ -46,6 +47,10 @@ class Person():
     first_name: str # their first name
     last_name: str  # their last name
     email: str      # their email address
+
+    @property
+    def name(self):
+        return self.first_name + " " + self.last_name
 
 
 @dataclass
@@ -165,6 +170,17 @@ def main() -> int:
     for item in resp.json()["result"]:
         load_result(item, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
+
+    for obs in sorted(observations.values(), key=attrgetter("start_time"), reverse=True):
+        if not ("South Mountain" in obs.station.name or "SMR" in obs.station.name):
+            continue
+        logger.info(
+            f"{obs.start_time.strftime('%Y-%m-%d')} "
+            f"[{obs.fs_id:9s}]  "
+            f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
+            f"{obs.observer.name:20s}  "
+            f"{obs.species_id}"
+        )
 
 
 if __name__ == "__main__":
