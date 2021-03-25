@@ -6,6 +6,7 @@ from typing import Any, Optional
 # constants
 API_PREFIX = "https://frogwatch.next.fieldscope.org/api/v3/"
 QUERY_URL = API_PREFIX + "schema/frogwatch/query?f=json"
+SCHEMA_URL = API_PREFIX + "schema/frogwatch"
 
 ALL_FIELDS = [
     "City",

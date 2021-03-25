@@ -16,7 +16,7 @@ import logging
 import requests
 
 from .version import __version__
-from .fieldscope import (query_body, OBS_FIELDS, QUERY_URL)
+from .fieldscope import (query_body, OBS_FIELDS, QUERY_URL, SCHEMA_URL)
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
@@ -144,6 +144,12 @@ def load_result(
         observations[observation.fs_id] = observation
 
 
+def load_schema(body: dict) -> None:
+    """Load the details of the Frogwatch schema into a form that we can use it.
+    """
+    Path("frogwatch_schema.json").write_text(json.dumps(body, indent=4))
+
+
 def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
     parser = argparse.ArgumentParser()
@@ -158,6 +164,10 @@ def main() -> int:
     if opt.debug:
         logger.setLevel(logging.DEBUG)
         logger.debug("[debug mode]")
+
+    resp = requests.get(SCHEMA_URL)
+    logger.debug(json.dumps(resp.json(), indent=4))
+    schema = load_schema(resp.json())
 
     query = query_body(fields=OBS_FIELDS)
     resp = requests.post(QUERY_URL, json=query)
