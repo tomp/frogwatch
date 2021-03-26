@@ -7,8 +7,10 @@ Created: March 2021
 """
 import sys
 import json
+from pathlib import Path
 from datetime import datetime, time
 from dataclasses import dataclass
+from collections import defaultdict
 from operator import attrgetter
 import argparse
 import logging
@@ -63,18 +65,22 @@ class Observation():
     observer: "Person"    # the person who reported the observation
     start_time: datetime  # the beginning of the observation period
     end_time: datetime    # the end of the observation period
-    species_id: str
-    call_intensity: int
+    species: str
+    call_intensity: str
     temperature: float
-    beaufort_wind: int
-    precip_48h: int
-    precip: int
-    above_freezing_48h: bool
+    beaufort_wind: str
+    precip_48h: str
+    precip: str
+    above_freezing_48h: str
     notes: str
 
+def fahrenheit(celsius: float) -> float:
+    """Convert celsius temperature to Fahrenheit."""
+    return round(18 * celsius + 32)
 
 def load_result(
         item: dict,
+        labels: dict[str, dict[str, str]],
         stations: dict[FS_id, Station],
         observations: dict[FS_id, Observation],
         people: dict[FS_id, Person]
@@ -126,28 +132,45 @@ def load_result(
                 time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
         )
 
+        species_id=attrs["FrogWatch_SpeciesId"]
+        
         observation = Observation(
             fs_id=obs["observationId"],
             station=station,
             observer=observer,
             start_time=start_time,
             end_time=end_time,
-            species_id=attrs["FrogWatch_SpeciesId"],
-            call_intensity=int(attrs["FrogWatch_CallIntensity"]),
-            temperature=int(attrs["AirTemperature"]),
+            species=labels["FrogWatch_SpeciesId"][species_id],
+            call_intensity=attrs["FrogWatch_CallIntensity"],
+            temperature=fahrenheit(float(attrs["AirTemperature"])),
             beaufort_wind=int(attrs["BeaufortWind"]),
-            precip_48h=int(attrs["FrogWatch_PrecipitationLast48"]),
-            precip=int(attrs["FrogWatch_Precipitation"]),
-            above_freezing_48h=int(attrs["FrogWatch_AboveFreezingLast48"]),
-            notes=attrs["FrogWatch_SpeciesId"],
+            precip_48h=attrs["FrogWatch_PrecipitationLast48"],
+            precip=attrs["FrogWatch_Precipitation"],
+            above_freezing_48h=attrs["FrogWatch_AboveFreezingLast48"],
+            notes=attrs.get("Notes"),
         )
         observations[observation.fs_id] = observation
 
 
-def load_schema(body: dict) -> None:
-    """Load the details of the Frogwatch schema into a form that we can use it.
+def load_schema(body: dict) -> dict[str, dict[str, str]]:
+    """Load the mappings from the codes used in the database to the labels
+    people are used to seeing, for the coded fields in the schema.
+    Returns a dict mapping the field name to a dict mapping each db value to
+    its label.
     """
-    Path("frogwatch_schema.json").write_text(json.dumps(body, indent=4))
+    labels = defaultdict(dict)
+    for item in body["result"].values():
+        if not "folders" in item:
+            continue
+
+        for folder in item["folders"]:
+            for field in folder["fields"]:
+                if not field["values"]:
+                    continue
+                name = field["name"]
+                for item in field["values"]:
+                    labels[name][item["value"]] = item["label"]
+    return labels
 
 
 def parse_args():
@@ -167,7 +190,7 @@ def main() -> int:
 
     resp = requests.get(SCHEMA_URL)
     logger.debug(json.dumps(resp.json(), indent=4))
-    schema = load_schema(resp.json())
+    labels = load_schema(resp.json())
 
     query = query_body(fields=OBS_FIELDS)
     resp = requests.post(QUERY_URL, json=query)
@@ -178,7 +201,7 @@ def main() -> int:
     people: dict[FS_id, Person] = {}
 
     for item in resp.json()["result"]:
-        load_result(item, stations, observations, people)
+        load_result(item, labels, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
     for obs in sorted(observations.values(), key=attrgetter("start_time"), reverse=True):
@@ -189,7 +212,7 @@ def main() -> int:
             f"[{obs.fs_id:9s}]  "
             f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
             f"{obs.observer.name:20s}  "
-            f"{obs.species_id}"
+            f"{obs.species}"
         )
 
 
