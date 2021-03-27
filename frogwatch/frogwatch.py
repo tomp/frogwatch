@@ -94,11 +94,13 @@ def load_result(
     about the station, the observations, and the observers in the given maps.
     Each item represents the observations for a single station.
     """
+
+    owner2 = item["owner2"]
     station_owner = Person(
-        fs_id=item["owner2"]["ownerId"],
-        first_name=item["owner2"]["firstName"],
-        last_name=item["owner2"]["lastName"],
-        email=item["owner2"]["email"],
+        fs_id=owner2["ownerId"],
+        first_name=owner2.get("firstName"),
+        last_name=owner2.get("lastName"),
+        email=owner2.get("email"),
     )
     people[station_owner.fs_id] = station_owner
 
@@ -107,52 +109,57 @@ def load_result(
         name=item["stationName"],
         lon=float(item["geometry"]["x"]),
         lat=float(item["geometry"]["y"]),
-        city=item["attributes"]["City"],
-        county=item["attributes"]["County"],
-        state=item["attributes"]["State"],
+        city=item["attributes"].get("City"),
+        county=item["attributes"].get("County"),
+        state=item["attributes"].get("State"),
         owner=station_owner,
     )
     stations[station.fs_id] = station
 
     for obs in item["observations"]:
-        attrs = obs["attributes"]
+        try:
+            attrs = obs["attributes"]
 
-        observer = Person(
-            fs_id=obs["owner"]["ownerId"],
-            first_name=obs["owner"]["firstName"],
-            last_name=obs["owner"]["lastName"],
-            email=obs["owner"]["email"],
-        )
-        people[observer.fs_id] = observer
+            observer = Person(
+                fs_id=obs["owner"]["ownerId"],
+                first_name=obs["owner"]["firstName"],
+                last_name=obs["owner"]["lastName"],
+                email=obs["owner"]["email"],
+            )
+            people[observer.fs_id] = observer
 
-        obs_date = datetime.fromisoformat(obs["collectionDate"]).date()
-        f = attrs["StartTime"]
-        start_time = datetime.combine(
-            date=obs_date, time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
-        )
-        f = attrs["EndTime"]
-        end_time = datetime.combine(
-            date=obs_date, time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
-        )
+            obs_date = datetime.fromisoformat(obs["collectionDate"]).date()
+            f = attrs["StartTime"]
+            start_time = datetime.combine(
+                date=obs_date,
+                time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
+            )
+            f = attrs["EndTime"]
+            end_time = datetime.combine(
+                date=obs_date,
+                time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
+            )
 
-        species_id = attrs["FrogWatch_SpeciesId"]
+            species_id = attrs["FrogWatch_SpeciesId"]
 
-        observation = Observation(
-            fs_id=obs["observationId"],
-            station=station,
-            observer=observer,
-            start_time=start_time,
-            end_time=end_time,
-            species=labels["FrogWatch_SpeciesId"][species_id],
-            call_intensity=attrs["FrogWatch_CallIntensity"],
-            temperature=fahrenheit(float(attrs["AirTemperature"])),
-            beaufort_wind=int(attrs["BeaufortWind"]),
-            precip_48h=attrs["FrogWatch_PrecipitationLast48"],
-            precip=attrs["FrogWatch_Precipitation"],
-            above_freezing_48h=attrs["FrogWatch_AboveFreezingLast48"],
-            notes=attrs.get("Notes"),
-        )
-        observations[observation.fs_id] = observation
+            observation = Observation(
+                fs_id=obs["observationId"],
+                station=station,
+                observer=observer,
+                start_time=start_time,
+                end_time=end_time,
+                species=labels["FrogWatch_SpeciesId"][species_id],
+                call_intensity=attrs["FrogWatch_CallIntensity"],
+                temperature=fahrenheit(float(attrs.get("AirTemperature", "0.0"))),
+                beaufort_wind=int(attrs["BeaufortWind"]),
+                precip_48h=attrs["FrogWatch_PrecipitationLast48"],
+                precip=attrs["FrogWatch_Precipitation"],
+                above_freezing_48h=attrs["FrogWatch_AboveFreezingLast48"],
+                notes=attrs.get("Notes"),
+            )
+            observations[observation.fs_id] = observation
+        except KeyError as exc:
+            logger.error(f"KeyError: {exc}\nobservation = {json.dumps(obs, indent=4)}")
 
 
 def load_schema(body: dict) -> dict[str, dict[str, str]]:
@@ -179,8 +186,24 @@ def load_schema(body: dict) -> dict[str, dict[str, str]]:
 def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--nj", action="store_true", help="Limit results to New Jersey sites"
+    )
+    parser.add_argument(
+        "--smr",
+        action="store_true",
+        help="Limit results to South Mountain Reservation sites",
+    )
+    parser.add_argument("--start-date", help="Start date for observations (YYYY-MM-DD)")
+    parser.add_argument("--end-date", help="Ending date for observations (YYYY-MM-DD)")
     parser.add_argument("--debug", action="store_true", help="Produce debugging output")
     opt = parser.parse_args()
+
+    if opt.start_date:
+        opt.start_date = datetime.strpime("%Y-%m-%d", opt.start_date)
+    if opt.end_date:
+        opt.end_date = datetime.strpime("%Y-%m-%d", opt.end_date)
+
     return opt
 
 
@@ -194,10 +217,19 @@ def main() -> int:
     resp = requests.get(SCHEMA_URL)
     labels = load_schema(resp.json())
 
-    query = query_body(outline=SMR_OUTLINE)
+    outline, states = None, None
+    if opt.smr:
+        outline = SMR_OUTLINE
+    if opt.nj:
+        states = "NJ"
+
+    query = query_body(
+        outline=outline, state=states, start_date=opt.start_date, end_date=opt.end_date
+    )
     logger.debug(json.dumps(query, indent=4))
     resp = requests.post(QUERY_URL, json=query)
     logger.debug(f"query returned status {resp.status_code}")
+    resp.raise_for_status()
 
     stations: dict[FS_id, Station] = {}
     observations: dict[FS_id, Observation] = {}
