@@ -1,7 +1,11 @@
 """
 Constants and functions to support Fieldscope API queries.
 """
-from typing import Any, Optional
+from typing import Any, Optional, Union
+from datetime import datetime
+
+LonLat = list[float, float]
+Geofence = list[LonLat]
 
 # constants
 API_PREFIX = "https://frogwatch.next.fieldscope.org/api/v3/"
@@ -48,7 +52,7 @@ OBS_FIELDS = [
 ]
 
 
-SMR_CIRCLE = [
+SMR_CIRCLE: Geofence = [
     [-74.29012826552825, 40.791803637617120],
     [-74.28499313592775, 40.791612530497130],
     [-74.27990754836033, 40.791041052884930],
@@ -116,23 +120,97 @@ SMR_CIRCLE = [
     [-74.29012826552825, 40.791803637617120],
 ]
 
-FILTERS = [
-    "and",
-    {
+SMR_OUTLINE: Geofence = [
+    [-74.307884216832463,40.725040712683722],
+    [-74.314407349156681,40.729203572851702],
+    [-74.316467285680119,40.735967665228145],
+    [-74.313034058141056,40.740129841822124],
+    [-74.308914185094181,40.744291757996670],
+    [-74.305137634801213,40.751574484650860],
+    [-74.301361084508244,40.755995750994934],
+    [-74.300674439000431,40.761196864392325],
+    [-74.301361084508244,40.768477739470100],
+    [-74.297241211461369,40.771077858690852],
+    [-74.296554565953556,40.776537777880144],
+    [-74.287284851598088,40.795254094293441],
+    [-74.276298523473088,40.787196326908393],
+    [-74.283164978551213,40.776537777880144],
+    [-74.284194946812931,40.770817851347168],
+    [-74.269432068394963,40.772377880147765],
+    [-74.280349731707247,40.752536784504741],
+    [-74.282238006853731,40.748375384302832],
+    [-74.278633117937716,40.746294586540046],
+    [-74.283096313738483,40.741612553527524],
+    [-74.288761139177950,40.736539979157769],
+    [-74.295284271502169,40.731206855699071],
+    [-74.302665710711153,40.725483028146499],
+    [-74.307884216832463,40.725040712683722],
+]
+
+def area_filter(outline: Geofence) -> dict[str, Any]:
+    """Return a Fieldscope area filter, based on the given geofence."""
+    return {
         "within": {
             "sourceId": "circle",
-            "rings": [SMR_CIRCLE],
+            "rings": [outline],
             "spatialReference": {"wkid": 4326},
         },
         "enabled": True,
         "label": "Filter by area",
-    },
-]
+    }
 
-
-def query_body(fields: Optional[list[str]]) -> dict[str, Any]:
-    """Return the body to be used in the frogwatch query."""
+def state_filter(state: Union[str, list[str]]) -> dict[str, Any]:
+    """Return a Fieldscope state filter, based on the given state code, or
+    list of state codes.
+    """
+    if isinstance(state, list):
+        state_list = state
+    else:
+        state_list = [state]
     return {
-        "fields": fields or ALL_FIELDS,
-        "filters": FILTERS,
+        "field": "State",
+        "in": state_list,
+        "enabled": True,
+        "label": "Filter by value",
+    }
+
+def date_filter(
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None
+) -> dict[str, Any]:
+    """Return a Fieldscope time range filter, based on the given starting and
+    ending dates.
+    """
+    if not start:
+        start = datetime(1990, 1, 1)
+    if not end:
+        end = datetime.now()
+    return {
+        "begin": int(start.timestamp()),
+        "end": int(end.timestamp()),
+        "enabled": True,
+        "label": "Filter by date",
+    }
+
+
+def query_body(
+    outline: Optional[Geofence] = None,
+    state: Optional[str] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+) -> dict[str, Any]:
+    """Return the body to be used in the frogwatch query."""
+    filters = ["and"]
+    if outline:
+        filters.append(area_filter(outline))
+    if state:
+        filters.append(state_filter(state))
+    if start_date or end_date:
+        filters.append(date_filter(start_date, end_date))
+    if len(filters) == 1:
+        return {}
+
+    return {
+        "fields": ALL_FIELDS,
+        "filters": filters,
     }

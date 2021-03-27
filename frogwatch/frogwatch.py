@@ -7,7 +7,6 @@ Created: March 2021
 """
 import sys
 import json
-from pathlib import Path
 from datetime import datetime, time
 from dataclasses import dataclass
 from collections import defaultdict
@@ -18,7 +17,7 @@ import logging
 import requests
 
 from .version import __version__
-from .fieldscope import (query_body, OBS_FIELDS, QUERY_URL, SCHEMA_URL)
+from .fieldscope import (query_body, QUERY_URL, SCHEMA_URL, SMR_OUTLINE)
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
@@ -133,7 +132,7 @@ def load_result(
         )
 
         species_id=attrs["FrogWatch_SpeciesId"]
-        
+
         observation = Observation(
             fs_id=obs["observationId"],
             station=station,
@@ -159,11 +158,11 @@ def load_schema(body: dict) -> dict[str, dict[str, str]]:
     its label.
     """
     labels = defaultdict(dict)
-    for item in body["result"].values():
-        if not "folders" in item:
+    for result in body["result"].values():
+        if not "folders" in result:
             continue
 
-        for folder in item["folders"]:
+        for folder in result["folders"]:
             for field in folder["fields"]:
                 if not field["values"]:
                     continue
@@ -189,12 +188,12 @@ def main() -> int:
         logger.debug("[debug mode]")
 
     resp = requests.get(SCHEMA_URL)
-    logger.debug(json.dumps(resp.json(), indent=4))
     labels = load_schema(resp.json())
 
-    query = query_body(fields=OBS_FIELDS)
+    query = query_body(outline=SMR_OUTLINE)
+    logger.debug(json.dumps(query, indent=4))
     resp = requests.post(QUERY_URL, json=query)
-    logger.debug(json.dumps(resp.json(), indent=4))
+    logger.debug(f"query returned status {resp.status_code}")
 
     stations: dict[FS_id, Station] = {}
     observations: dict[FS_id, Observation] = {}
@@ -205,11 +204,8 @@ def main() -> int:
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
     for obs in sorted(observations.values(), key=attrgetter("start_time"), reverse=True):
-        if not ("South Mountain" in obs.station.name or "SMR" in obs.station.name):
-            continue
         logger.info(
-            f"{obs.start_time.strftime('%Y-%m-%d')} "
-            f"[{obs.fs_id:9s}]  "
+            f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
             f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
             f"{obs.observer.name:20s}  "
             f"{obs.species}"
