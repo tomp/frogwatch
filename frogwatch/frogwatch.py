@@ -200,9 +200,9 @@ def parse_args():
     opt = parser.parse_args()
 
     if opt.start_date:
-        opt.start_date = datetime.strpime("%Y-%m-%d", opt.start_date)
+        opt.start_date = datetime.strptime(opt.start_date, "%Y-%m-%d")
     if opt.end_date:
-        opt.end_date = datetime.strpime("%Y-%m-%d", opt.end_date)
+        opt.end_date = datetime.strptime(opt.end_date, "%Y-%m-%d")
 
     return opt
 
