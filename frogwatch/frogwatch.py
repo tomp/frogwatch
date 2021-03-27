@@ -17,37 +17,40 @@ import logging
 import requests
 
 from .version import __version__
-from .fieldscope import (query_body, QUERY_URL, SCHEMA_URL, SMR_OUTLINE)
+from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, SMR_OUTLINE
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
 logger = logging.getLogger()
 
 # models
-#pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes
 
 FS_id = str
 
+
 @dataclass
-class Station():
+class Station:
     """A Station is a location from which observations are reported."""
-    fs_id: FS_id    # the Fieldscope id for this station
-    name: str       # the station name
-    lon: float      # longitude in decinmal degrees
-    lat: float      # latitude in decimal degrees
-    city: str       # the station's city
-    county: str     # the station's county
-    state: str      # the station's state
-    owner: "Person" # the station "owner"
+
+    fs_id: FS_id  # the Fieldscope id for this station
+    name: str  # the station name
+    lon: float  # longitude in decinmal degrees
+    lat: float  # latitude in decimal degrees
+    city: str  # the station's city
+    county: str  # the station's county
+    state: str  # the station's state
+    owner: "Person"  # the station "owner"
 
 
 @dataclass
-class Person():
+class Person:
     """A Person is a station owner or an observer."""
-    fs_id: FS_id    # the fieldscope id for this person
-    first_name: str # their first name
+
+    fs_id: FS_id  # the fieldscope id for this person
+    first_name: str  # their first name
     last_name: str  # their last name
-    email: str      # their email address
+    email: str  # their email address
 
     @property
     def name(self):
@@ -55,15 +58,16 @@ class Person():
 
 
 @dataclass
-class Observation():
+class Observation:
     """An Observation is an observation of a single frog species at a specific
     time and location.
     """
-    fs_id: FS_id          # the fieldscope id for this observation
-    station: "Station"    # the station where the observation was made
-    observer: "Person"    # the person who reported the observation
+
+    fs_id: FS_id  # the fieldscope id for this observation
+    station: "Station"  # the station where the observation was made
+    observer: "Person"  # the person who reported the observation
     start_time: datetime  # the beginning of the observation period
-    end_time: datetime    # the end of the observation period
+    end_time: datetime  # the end of the observation period
     species: str
     call_intensity: str
     temperature: float
@@ -73,16 +77,18 @@ class Observation():
     above_freezing_48h: str
     notes: str
 
+
 def fahrenheit(celsius: float) -> float:
     """Convert celsius temperature to Fahrenheit."""
     return round(18 * celsius + 32)
 
+
 def load_result(
-        item: dict,
-        labels: dict[str, dict[str, str]],
-        stations: dict[FS_id, Station],
-        observations: dict[FS_id, Observation],
-        people: dict[FS_id, Person]
+    item: dict,
+    labels: dict[str, dict[str, str]],
+    stations: dict[FS_id, Station],
+    observations: dict[FS_id, Observation],
+    people: dict[FS_id, Person],
 ) -> None:
     """Extract observations from the given query result item and save information
     about the station, the observations, and the observers in the given maps.
@@ -122,16 +128,14 @@ def load_result(
         obs_date = datetime.fromisoformat(obs["collectionDate"]).date()
         f = attrs["StartTime"]
         start_time = datetime.combine(
-                date=obs_date,
-                time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
+            date=obs_date, time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
         )
         f = attrs["EndTime"]
         end_time = datetime.combine(
-                date=obs_date,
-                time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
+            date=obs_date, time=time(int(f["hour"]), int(f["minute"]), int(f["second"]))
         )
 
-        species_id=attrs["FrogWatch_SpeciesId"]
+        species_id = attrs["FrogWatch_SpeciesId"]
 
         observation = Observation(
             fs_id=obs["observationId"],
@@ -203,7 +207,9 @@ def main() -> int:
         load_result(item, labels, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
-    for obs in sorted(observations.values(), key=attrgetter("start_time"), reverse=True):
+    for obs in sorted(
+        observations.values(), key=attrgetter("start_time"), reverse=True
+    ):
         logger.info(
             f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
             f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
