@@ -8,9 +8,9 @@ Created: March 2021
 import sys
 import json
 from datetime import datetime, time
-from dataclasses import dataclass
 from collections import defaultdict
 from operator import attrgetter
+import sqlite3
 import argparse
 import logging
 
@@ -18,64 +18,24 @@ import requests
 
 from .version import __version__
 from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, SMR_OUTLINE
+from .models import (
+    Station,
+    Person,
+    Observation,
+    FS_id,
+    create_tables,
+    update_persons,
+    update_stations,
+    update_observations,
+)
+
+
+DEFAULT_DB_FILE = "frogwatch.db"
+
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
 logger = logging.getLogger()
-
-# models
-# pylint: disable=too-many-instance-attributes
-
-FS_id = str
-
-
-@dataclass
-class Station:
-    """A Station is a location from which observations are reported."""
-
-    fs_id: FS_id  # the Fieldscope id for this station
-    name: str  # the station name
-    lon: float  # longitude in decinmal degrees
-    lat: float  # latitude in decimal degrees
-    city: str  # the station's city
-    county: str  # the station's county
-    state: str  # the station's state
-    owner: "Person"  # the station "owner"
-
-
-@dataclass
-class Person:
-    """A Person is a station owner or an observer."""
-
-    fs_id: FS_id  # the fieldscope id for this person
-    first_name: str  # their first name
-    last_name: str  # their last name
-    email: str  # their email address
-
-    @property
-    def name(self):
-        return self.first_name + " " + self.last_name
-
-
-@dataclass
-class Observation:
-    """An Observation is an observation of a single frog species at a specific
-    time and location.
-    """
-
-    fs_id: FS_id  # the fieldscope id for this observation
-    station: "Station"  # the station where the observation was made
-    observer: "Person"  # the person who reported the observation
-    start_time: datetime  # the beginning of the observation period
-    end_time: datetime  # the end of the observation period
-    species: str
-    call_intensity: str
-    temperature: float
-    beaufort_wind: str
-    precip_48h: str
-    precip: str
-    above_freezing_48h: str
-    notes: str
 
 
 def fahrenheit(celsius: float) -> float:
@@ -94,10 +54,11 @@ def load_result(
     about the station, the observations, and the observers in the given maps.
     Each item represents the observations for a single station.
     """
+    # pylint: disable=too-many-locals
 
     owner2 = item["owner2"]
     station_owner = Person(
-        fs_id=owner2["ownerId"],
+        fs_id=str(owner2["ownerId"]),
         first_name=owner2.get("firstName"),
         last_name=owner2.get("lastName"),
         email=owner2.get("email"),
@@ -105,7 +66,7 @@ def load_result(
     people[station_owner.fs_id] = station_owner
 
     station = Station(
-        fs_id=item["stationId"],
+        fs_id=str(item["stationId"]),
         name=item["stationName"],
         lon=float(item["geometry"]["x"]),
         lat=float(item["geometry"]["y"]),
@@ -121,7 +82,7 @@ def load_result(
             attrs = obs["attributes"]
 
             observer = Person(
-                fs_id=obs["owner"]["ownerId"],
+                fs_id=str(obs["owner"]["ownerId"]),
                 first_name=obs["owner"]["firstName"],
                 last_name=obs["owner"]["lastName"],
                 email=obs["owner"]["email"],
@@ -143,7 +104,7 @@ def load_result(
             species_id = attrs["FrogWatch_SpeciesId"]
 
             observation = Observation(
-                fs_id=obs["observationId"],
+                fs_id=str(obs["observationId"]),
                 station=station,
                 observer=observer,
                 start_time=start_time,
@@ -187,6 +148,12 @@ def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--db", action="store_true", help="Write downloaded data to the database."
+    )
+    parser.add_argument(
+        "--db-file", default=DEFAULT_DB_FILE, help="The name of the SQLite DB to use."
+    )
+    parser.add_argument(
         "--nj", action="store_true", help="Limit results to New Jersey sites"
     )
     parser.add_argument(
@@ -214,6 +181,9 @@ def main() -> int:
         logger.setLevel(logging.DEBUG)
         logger.debug("[debug mode]")
 
+    db = sqlite3.connect(opt.db_file)
+    create_tables(db)
+
     resp = requests.get(SCHEMA_URL)
     labels = load_schema(resp.json())
 
@@ -238,6 +208,10 @@ def main() -> int:
     for item in resp.json()["result"]:
         load_result(item, labels, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
+
+    update_persons(db, people)
+    update_stations(db, stations)
+    update_observations(db, observations)
 
     for obs in sorted(
         observations.values(), key=attrgetter("start_time"), reverse=True
