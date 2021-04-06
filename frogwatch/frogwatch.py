@@ -5,6 +5,7 @@ Retrieve Frogwatch data using the Fieldscope API.
 Author: Tom Pollard
 Created: March 2021
 """
+from typing import Optional
 import sys
 import json
 from datetime import datetime, time
@@ -17,7 +18,7 @@ import logging
 import requests
 
 from .version import __version__
-from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, SMR_OUTLINE
+from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, STATIONS_URL, SMR_OUTLINE
 from .models import (
     Station,
     Person,
@@ -38,12 +39,14 @@ logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
 logger = logging.getLogger()
 
 
-def fahrenheit(celsius: float) -> float:
-    """Convert celsius temperature to Fahrenheit."""
-    return round(18 * celsius + 32)
+def fahrenheit(celsius: float) -> Optional[float]:
+    """Convert above-freezing Celsius temperature to Fahrenheit."""
+    if not celsius:
+        return None
+    return round((1.8 * celsius) + 32)
 
 
-def load_result(
+def load_station(
     item: dict,
     labels: dict[str, dict[str, str]],
     stations: dict[FS_id, Station],
@@ -193,20 +196,32 @@ def main() -> int:
     if opt.nj:
         states = "NJ"
 
+    stations: dict[FS_id, Station] = {}
+    observations: dict[FS_id, Observation] = {}
+    people: dict[FS_id, Person] = {}
+
+    # Stations query
+    logger.debug(STATIONS_URL)
+    resp = requests.get(STATIONS_URL)
+    logger.debug(f"stations request returned status {resp.status_code}")
+    resp.raise_for_status()
+
+    for item in resp.json()["result"]:
+        load_station(item, labels, stations, observations, people)
+    logger.info(f"Loaded {len(stations)} stations")
+
+    # Observations query
     query = query_body(
         outline=outline, state=states, start_date=opt.start_date, end_date=opt.end_date
     )
+    logger.debug(QUERY_URL)
     logger.debug(json.dumps(query, indent=4))
     resp = requests.post(QUERY_URL, json=query)
     logger.debug(f"query returned status {resp.status_code}")
     resp.raise_for_status()
 
-    stations: dict[FS_id, Station] = {}
-    observations: dict[FS_id, Observation] = {}
-    people: dict[FS_id, Person] = {}
-
     for item in resp.json()["result"]:
-        load_result(item, labels, stations, observations, people)
+        load_station(item, labels, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
     update_persons(db, people)
