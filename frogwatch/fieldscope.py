@@ -1,5 +1,5 @@
 """
-Constants and functions to support Fieldscope API queries.
+Constants and functions to support Fieldscope API queries for Frogwatch.
 """
 from typing import Any, Optional, Union
 from datetime import datetime
@@ -17,6 +17,7 @@ ALL_FIELDS = [
     "City",
     "County",
     "State",
+    "FrogWatch_Chapter",
     "FrogWatch_LandUse",
     "FrogWatch_Habitat",
     "FrogWatch_WetlandOrigin",
@@ -178,6 +179,36 @@ def state_filter(state: Union[str, list[str]]) -> dict[str, Any]:
     }
 
 
+def chapter_filter(chapter: Union[str, list[str]]) -> dict[str, Any]:
+    """Return a Fieldscope chapter filter, based on the given group id.
+    """
+    if isinstance(chapter, list):
+        chapter_list = [str(v) for v in chapter]
+    else:
+        chapter_list = [str(chapter)]
+    return {
+        "field": "Frogwatch_Chapter",
+        "oneof": chapter_list,
+        "enabled": True,
+        "label": "Filter by group",
+    }
+
+
+def user_filter(user: Union[int, list[int]]) -> dict[str, Any]:
+    """Return a Fieldscope user filter, based on the given group id.
+    """
+    if isinstance(user, list):
+        user_list = [int(v) for v in user]
+    else:
+        user_list = [int(user)]
+    return {
+        "field": "user",
+        "oneof": user_list,
+        "enabled": True,
+        "label": "Filter by user",
+    }
+
+
 def date_filter(
     start: Optional[datetime] = None, end: Optional[datetime] = None
 ) -> dict[str, Any]:
@@ -199,6 +230,8 @@ def date_filter(
 def query_body(
     outline: Optional[Geofence] = None,
     state: Optional[str] = None,
+    chapter: Optional[int] = None,
+    user: Optional[int] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
 ) -> dict[str, Any]:
@@ -208,6 +241,10 @@ def query_body(
         filters.append(area_filter(outline))
     if state:
         filters.append(state_filter(state))
+    if chapter:
+        filters.append(chapter_filter(chapter))
+    if user:
+        filters.append(user_filter(user))
     if start_date or end_date:
         filters.append(date_filter(start_date, end_date))
     if len(filters) == 1:

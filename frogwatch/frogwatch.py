@@ -92,19 +92,30 @@ def load_station(
             )
             people[observer.fs_id] = observer
 
-            obs_date = datetime.fromisoformat(obs["collectionDate"]).date()
-            f = attrs["StartTime"]
-            start_time = datetime.combine(
-                date=obs_date,
-                time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
-            )
-            f = attrs["EndTime"]
-            end_time = datetime.combine(
-                date=obs_date,
-                time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
-            )
+            obs_date = datetime.fromisoformat(obs["collectionDate"]).replace(tzinfo=None)
+            if "StartTime" in attrs:
+                f = attrs["StartTime"]
+                start_time = datetime.combine(
+                    date=obs_date.date(),
+                    time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
+                )
+            else:
+                start_time = obs_date
+
+            if "EndTime" in attrs:
+                f = attrs["EndTime"]
+                end_time = datetime.combine(
+                    date=obs_date,
+                    time=time(int(f["hour"]), int(f["minute"]), int(f["second"])),
+                )
+            else:
+                end_time = None
 
             species_id = attrs["FrogWatch_SpeciesId"]
+            if "BeaufortWind" in attrs:
+                wind = int(attrs["BeaufortWind"])
+            else:
+                wind = None
 
             observation = Observation(
                 fs_id=str(obs["observationId"]),
@@ -113,12 +124,12 @@ def load_station(
                 start_time=start_time,
                 end_time=end_time,
                 species=labels["FrogWatch_SpeciesId"][species_id],
-                call_intensity=attrs["FrogWatch_CallIntensity"],
+                call_intensity=attrs.get("FrogWatch_CallIntensity"),
                 temperature=fahrenheit(float(attrs.get("AirTemperature", "0.0"))),
-                beaufort_wind=int(attrs["BeaufortWind"]),
-                precip_48h=attrs["FrogWatch_PrecipitationLast48"],
-                precip=attrs["FrogWatch_Precipitation"],
-                above_freezing_48h=attrs["FrogWatch_AboveFreezingLast48"],
+                beaufort_wind=wind,
+                precip_48h=attrs.get("FrogWatch_PrecipitationLast48"),
+                precip=attrs.get("FrogWatch_Precipitation"),
+                above_freezing_48h=attrs.get("FrogWatch_AboveFreezingLast48"),
                 notes=attrs.get("Notes"),
             )
             observations[observation.fs_id] = observation
@@ -157,15 +168,22 @@ def parse_args():
         "--db-file", default=DEFAULT_DB_FILE, help="The name of the SQLite DB to use."
     )
     parser.add_argument(
-        "--nj", action="store_true", help="Limit results to New Jersey sites"
+        "--nj", action="store_true", help="Return only observations from New Jersey"
     )
     parser.add_argument(
         "--smr",
         action="store_true",
-        help="Limit results to South Mountain Reservation sites",
+        help="Return only observations from South Mountain Reservation",
+    )
+    parser.add_argument(
+        "--hartshorne",
+        action="store_true",
+        help="Return only observations for the Cora Hartshorne Frogwatch chapter",
     )
     parser.add_argument("--start-date", help="Start date for observations (YYYY-MM-DD)")
     parser.add_argument("--end-date", help="Ending date for observations (YYYY-MM-DD)")
+    parser.add_argument("--stations", action="store_true", help="Download station data separately")
+    parser.add_argument("--quiet", action="store_true", help="Don't summarize all observations in the output")
     parser.add_argument("--debug", action="store_true", help="Produce debugging output")
     opt = parser.parse_args()
 
@@ -190,35 +208,42 @@ def main() -> int:
     resp = requests.get(SCHEMA_URL)
     labels = load_schema(resp.json())
 
-    outline, states = None, None
+    outline, state, chapter = None, None, []
     if opt.smr:
         outline = SMR_OUTLINE
     if opt.nj:
-        states = "NJ"
+        state = "NJ"
+    if opt.hartshorne:
+        chapter = "138"
 
     stations: dict[FS_id, Station] = {}
     observations: dict[FS_id, Observation] = {}
     people: dict[FS_id, Person] = {}
 
     # Stations query
-    logger.debug(STATIONS_URL)
-    resp = requests.get(STATIONS_URL)
-    logger.debug(f"stations request returned status {resp.status_code}")
-    resp.raise_for_status()
+    if opt.stations:
+        logger.debug(STATIONS_URL)
+        resp = requests.get(STATIONS_URL)
+        logger.debug(f"stations request returned status {resp.status_code}")
+        resp.raise_for_status()
 
-    for item in resp.json()["result"]:
-        load_station(item, labels, stations, observations, people)
-    logger.info(f"Loaded {len(stations)} stations")
+        for item in resp.json()["result"]:
+            load_station(item, labels, stations, observations, people)
+        logger.info(f"Loaded {len(stations)} stations")
 
     # Observations query
     query = query_body(
-        outline=outline, state=states, start_date=opt.start_date, end_date=opt.end_date
+        outline=outline, state=state, chapter=chapter, start_date=opt.start_date, end_date=opt.end_date
     )
     logger.debug(QUERY_URL)
     logger.debug(json.dumps(query, indent=4))
     resp = requests.post(QUERY_URL, json=query)
     logger.debug(f"query returned status {resp.status_code}")
     resp.raise_for_status()
+
+    if not "result" in resp.json():
+        logger.error(json.dumps(resp.json(), indent=4))
+        return 1
 
     for item in resp.json()["result"]:
         load_station(item, labels, stations, observations, people)
@@ -231,12 +256,13 @@ def main() -> int:
     for obs in sorted(
         observations.values(), key=attrgetter("start_time"), reverse=True
     ):
-        logger.info(
-            f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
-            f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
-            f"{obs.observer.name:20s}  "
-            f"{obs.species}"
-        )
+        if not opt.quiet:
+            logger.info(
+                f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
+                f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
+                f"{obs.observer.name:20s}  "
+                f"{obs.species}"
+            )
 
 
 if __name__ == "__main__":
