@@ -19,19 +19,11 @@ import requests
 
 from .version import __version__
 from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, STATIONS_URL, SMR_OUTLINE
-from .models import (
-    Station,
-    Person,
-    Observation,
-    FS_id,
-    create_tables,
-    update_persons,
-    update_stations,
-    update_observations,
-)
+from .models import Station, Person, Observation, FS_id
+from . import db_postgres as db
 
 
-DEFAULT_DB_FILE = "frogwatch.db"
+DEFAULT_DB_URI = "postgresql://pollard@localhost:5432/frogwatch"
 
 
 # logging
@@ -165,7 +157,7 @@ def parse_args():
         "--db", action="store_true", help="Write downloaded data to the database."
     )
     parser.add_argument(
-        "--db-file", default=DEFAULT_DB_FILE, help="The name of the SQLite DB to use."
+        "--db-uri", default=DEFAULT_DB_URI, help="A Postgres connection URI specifying the DB to use."
     )
     parser.add_argument(
         "--nj", action="store_true", help="Return only observations from New Jersey"
@@ -202,8 +194,8 @@ def main() -> int:
         logger.setLevel(logging.DEBUG)
         logger.debug("[debug mode]")
 
-    db = sqlite3.connect(opt.db_file)
-    create_tables(db)
+    client = db.connect(opt.db_uri)
+    db.create_tables(client)
 
     resp = requests.get(SCHEMA_URL)
     labels = load_schema(resp.json())
@@ -249,9 +241,9 @@ def main() -> int:
         load_station(item, labels, stations, observations, people)
     logger.info(f"{len(observations)} observations from {len(stations)} stations")
 
-    update_persons(db, people)
-    update_stations(db, stations)
-    update_observations(db, observations)
+    db.update_persons(client, people)
+    db.update_stations(client, stations)
+    db.update_observations(client, observations)
 
     for obs in sorted(
         observations.values(), key=attrgetter("start_time"), reverse=True
@@ -263,6 +255,8 @@ def main() -> int:
                 f"{obs.observer.name:20s}  "
                 f"{obs.species}"
             )
+
+    return 0
 
 
 if __name__ == "__main__":
