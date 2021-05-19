@@ -1,4 +1,7 @@
 requests
 configargparse
 psycopg2-binary
+bokeh
+pandas
+numpy
 
