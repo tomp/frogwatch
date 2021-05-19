@@ -1,2 +1,4 @@
 requests
+configargparse
+psycopg2-binary
 

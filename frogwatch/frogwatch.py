@@ -11,10 +11,9 @@ import json
 from datetime import datetime, time
 from collections import defaultdict
 from operator import attrgetter
-import sqlite3
-import argparse
 import logging
 
+import configargparse
 import requests
 
 from .version import __version__
@@ -84,7 +83,9 @@ def load_station(
             )
             people[observer.fs_id] = observer
 
-            obs_date = datetime.fromisoformat(obs["collectionDate"]).replace(tzinfo=None)
+            obs_date = datetime.fromisoformat(obs["collectionDate"]).replace(
+                tzinfo=None
+            )
             if "StartTime" in attrs:
                 f = attrs["StartTime"]
                 start_time = datetime.combine(
@@ -152,12 +153,15 @@ def load_schema(body: dict) -> dict[str, dict[str, str]]:
 
 def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
-    parser = argparse.ArgumentParser()
+    parser = configargparse.ArgumentParser()
     parser.add_argument(
         "--db", action="store_true", help="Write downloaded data to the database."
     )
     parser.add_argument(
-        "--db-uri", default=DEFAULT_DB_URI, help="A Postgres connection URI specifying the DB to use."
+        "--db-uri",
+        default=DEFAULT_DB_URI,
+        env_var="FROGWATCH_DB_URI",
+        help="A Postgres connection URI specifying the DB to use.",
     )
     parser.add_argument(
         "--nj", action="store_true", help="Return only observations from New Jersey"
@@ -174,8 +178,14 @@ def parse_args():
     )
     parser.add_argument("--start-date", help="Start date for observations (YYYY-MM-DD)")
     parser.add_argument("--end-date", help="Ending date for observations (YYYY-MM-DD)")
-    parser.add_argument("--stations", action="store_true", help="Download station data separately")
-    parser.add_argument("--quiet", action="store_true", help="Don't summarize all observations in the output")
+    parser.add_argument(
+        "--stations", action="store_true", help="Download station data separately"
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Don't summarize all observations in the output",
+    )
     parser.add_argument("--debug", action="store_true", help="Produce debugging output")
     opt = parser.parse_args()
 
@@ -225,7 +235,11 @@ def main() -> int:
 
     # Observations query
     query = query_body(
-        outline=outline, state=state, chapter=chapter, start_date=opt.start_date, end_date=opt.end_date
+        outline=outline,
+        state=state,
+        chapter=chapter,
+        start_date=opt.start_date,
+        end_date=opt.end_date,
     )
     logger.debug(QUERY_URL)
     logger.debug(json.dumps(query, indent=4))
