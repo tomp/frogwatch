@@ -160,7 +160,7 @@ def parse_args():
     parser.add_argument(
         "--db-uri",
         default=DEFAULT_DB_URI,
-        env_var="FROGWATCH_DB_URI",
+        env_var="DATABASE_URL",
         help="A Postgres connection URI specifying the DB to use.",
     )
     parser.add_argument(
