@@ -20,10 +20,10 @@ import pandas as pd
 import psycopg2 as pg
 
 
-def load_observations():
+def load_observations(pg_url):
     """Return dataframes representing the stations and observations to display."""
 
-    db = pg.connect('postgresql://pollard@localhost:5432/frogwatch')
+    db = pg.connect(pg_url)
 
     stations = pd.read_sql('select * from stations', db)
     people = pd.read_sql('select * from persons', db)

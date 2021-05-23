@@ -1,6 +1,10 @@
 """
 This is the code to create the main dashboard display.
 """
+import os
+import math
+from datetime import datetime
+
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
 from bokeh.models import HoverTool, PanTool, WheelZoomTool, ResetTool, TapTool
@@ -11,30 +15,21 @@ from bokeh.layouts import layout
 from bokeh.plotting import gmap, curdoc
 from bokeh.models import GMapOptions
 
-from datetime import datetime
-import math
-
 from .data import load_observations
 
-print("Hello World!")
+print("Peep, peep, peep!")
 
 
 # Google API key for map display
-api_key = "AIzaSyD4IiUSTkgTTe800sjX5LIuVhUsAFsRqG4"
+GMAP_API_KEY = "AIzaSyD4IiUSTkgTTe800sjX5LIuVhUsAFsRqG4"
 
+# local database connection string.  On Heroku we'll get this from $DATABASE_URL
+DEFAULT_DATABASE_URL = "postgresql://pollard@localhost:5432/frogwatch"
 
-def now():
-    return datetime.now().isoformat()
+pg_url = os.getenv("DATABASE_URL", default=DEFAULT_DATABASE_URL)
+print(f"DATABASE_URL: {pg_url}")
 
-def something_changed(attrname, old, new):
-    print(attrname + " " + repr(old))
-
-def obs_selected(attrname, old, new):
-    print(f"{now()} - observation selected")
-    status.text = f"observations {obs_table.source.selected.indices} selected"
-
-
-station_obs, smr_observations = load_observations()
+station_obs, smr_observations = load_observations(pg_url)
 
 all_stations = set(station_obs['name'])
 selected_stations = all_stations
@@ -47,6 +42,18 @@ print(f"{len(selected_species)} species")
 all_observers = set(smr_observations['name_observer'])
 selected_observers = all_observers
 print(f"{len(selected_observers)} observers")
+
+
+def now():
+    return datetime.now().isoformat()
+
+def something_changed(attrname, old, new):
+    print(attrname + " " + repr(old))
+
+def obs_selected(attrname, old, new):
+    print(f"{now()} - observation selected")
+    status.text = f"observations {obs_table.source.selected.indices} selected"
+
 
 # If updating is true, we're in the middle of a data source update, 
 # and the usual selection callbacks should be suppressed.
@@ -200,7 +207,7 @@ def create_station_map(station_source, api_key):
         ("site", "@name"),
     ])
 
-    station_map = gmap(api_key, map_options,
+    station_map = gmap(GMAP_API_KEY, map_options,
                        tools=[hover, WheelZoomTool(), PanTool(), ResetTool(), TapTool()],
                        width=400,
                        title="South Mountain Reservation")
