@@ -1,1 +1,1 @@
-web: bokeh serve --show dashboard
+web: bokeh serve --port $PORT --show dashboard
