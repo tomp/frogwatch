@@ -1,1 +1,1 @@
-web: bokeh serve --app dashboard
+web: bokeh serve --show dashboard
