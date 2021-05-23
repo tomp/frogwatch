@@ -207,7 +207,7 @@ def create_station_map(station_source, api_key):
         ("site", "@name"),
     ])
 
-    station_map = gmap(GMAP_API_KEY, map_options,
+    station_map = gmap(api_key, map_options,
                        tools=[hover, WheelZoomTool(), PanTool(), ResetTool(), TapTool()],
                        width=400,
                        title="South Mountain Reservation")
@@ -266,7 +266,7 @@ people_table = DataTable(source=people_source(smr_observations),
                           width=400, height=320, margin=(30, 5, 5, 5), 
                           index_position=None)
 
-station_map = create_station_map(station_source, api_key)
+station_map = create_station_map(station_source, GMAP_API_KEY)
 obs_table = create_observations_table()
 # species_table = create_species_table()
 # people_table = create_people_table()
