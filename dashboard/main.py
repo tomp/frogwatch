@@ -26,7 +26,6 @@ api_key = "AIzaSyD4IiUSTkgTTe800sjX5LIuVhUsAFsRqG4"
 def now():
     return datetime.now().isoformat()
 
-
 def something_changed(attrname, old, new):
     print(attrname + " " + repr(old))
 
@@ -48,50 +47,78 @@ print(f"{len(selected_species)} species")
 all_observers = set(smr_observations['name_observer'])
 selected_observers = all_observers
 print(f"{len(selected_observers)} observers")
+
+# If updating is true, we're in the middle of a data source update, 
+# and the usual selection callbacks should be suppressed.
+updating = False
     
 def stations_selected(attrname, old, new):
-    print(f"{now()} - station selected")
     global selected_stations
-    selected_stations = list(station_obs['name'][station_source.selected.indices]) or all_stations
-    # status.text = f"Selected stations {', '.join(selected_stations)}"
-    species_selected = all_species
-    update_panels()
+    if not updating:
+        print(f"{now()} - station selected")
+        selected_stations = list(
+            station_obs['name'][station_source.selected.indices]
+        ) or all_stations
+        update_panels()
     
 def species_selected(attrname, old, new):
-    print(f"{now()} - species selected")
     global selected_species
-    try:
-        selected_species = [
-            species_table.source.data['species'][idx] for idx in species_table.source.selected.indices
-        ] or all_species
-    except IndexError:
-        selected_species = all_species
-    # status.text = f"Selected species {', '.join(selected_species)}"
-    update_panels()
-    
+    if not updating:
+        print(f"{now()} - species selected")
+        try:
+            selection = species_table.source.selected.indices
+            selected_species = [
+                species_table.source.data['species'][idx] for idx in selection
+            ] or all_species
+        except IndexError:
+            selected_species = all_species
+        update_panels()
+
 def observer_selected(attrname, old, new):
-    print(f"{now()} - observer selected")
     global selected_observers
-    try:
-        selected_observers = [
-            people_table.source.data['name_observer'][idx] for idx in people_table.source.selected.indices
-        ] or all_observers
-    except IndexError:
-        selected_observers = all_observers
-    # status.text = f"Selected observers {', '.join(selected_observers)}"
-    update_panels()
-    
+    if not updating:
+        print(f"{now()} - observer selected")
+        try:
+            selection = people_table.source.selected.indices
+            selected_observers = [
+                people_table.source.data['name_observer'][idx] for idx in selection
+            ] or all_observers
+        except IndexError:
+            selected_observers = all_observers
+        update_panels()
+        
+def select_stations_by_name(stations):
+    station_source.selected.indices = list(
+        station_obs[station_obs['name'].isin(stations)].index
+    )
+    print(f"set station indices to {station_source.selected.indices}")
+
+def unselect_stations():
+    station_source.selected.indices = []
+    print(f"reset station indices to {station_source.selected.indices}")
+
 def update_panels():
-    station_filter = smr_observations['name_station'].isin(selected_stations)
-    species_filter = smr_observations['species'].isin(selected_species)
-    observer_filter = smr_observations['name_observer'].isin(selected_observers)
-    filtered_observations = smr_observations[
-        station_filter & species_filter & observer_filter
-    ]
-    print(f"{len(filtered_observations)} filtered observations")
-    obs_table.source = obs_source(filtered_observations)
-    species_table.source=species_source(filtered_observations)
-    people_table.source=people_source(filtered_observations)
+    global updating
+    if not updating:
+        updating = True
+        station_filter = smr_observations['name_station'].isin(selected_stations)
+        species_filter = smr_observations['species'].isin(selected_species)
+        observer_filter = smr_observations['name_observer'].isin(selected_observers)
+        filtered_observations = smr_observations[
+            station_filter & species_filter & observer_filter
+        ]
+
+        # if observations have been filtered, highlight the stations where they were made.
+        if len(filtered_observations) == len(smr_observations):
+            unselect_stations()
+        elif len(selected_stations) == len(all_stations):
+            select_stations_by_name(filtered_observations['name_station'].unique())
+        
+        obs_table.source = obs_source(filtered_observations)
+        species_table.source=species_source(filtered_observations)
+        people_table.source=people_source(filtered_observations)
+        updating = False
+
 
 # There may be stations that have no observations, so we define this source independently of the observations
 station_source = ColumnDataSource(
@@ -100,7 +127,7 @@ station_source = ColumnDataSource(
         lon=station_obs['lon'],
         name=station_obs['name'],
         count=station_obs['observations'],
-        size=[10 + 7*math.log(v + 1) for v in station_obs['observations']],
+        size=[15 + 5*math.log(v + 1) for v in station_obs['observations']],
     )
 )
 
