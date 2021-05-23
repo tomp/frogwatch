@@ -33,6 +33,12 @@ def load_observations():
 
     smr_station_ids = list([v for v in stations[stations['name'].str.contains('SMR')].fs_id])
 
+    observations.loc[observations['station_id'] == '593550', 'station_id'] = '100000218'
+    observations.loc[observations['station_id'] == '1480244', 'station_id'] = '100000219'
+    observations.loc[observations['station_id'] == '605236', 'station_id'] = '100000215'
+    observations.loc[observations['station_id'] == '100000202', 'station_id'] = '100000215'
+    smr_station_ids = [v for v in smr_station_ids if v != '100000202']
+
     obs_and_name = pd.merge(
          observations, 
          people[['fs_id', 'name']], 
