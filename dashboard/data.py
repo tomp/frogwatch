@@ -4,7 +4,7 @@ Load 'raw' Frogwatch data from a database, and prepare it for display on the das
 The raw data is more or less a copy of the data available through the Fieldscope API,
 but normalized into Person, Station, and Observation tables.  For the dashboard, we
 pull just the data for a particular project, such as South Mountain Reservation, 
-re-lebel duplicate stations and species, and denomalize the station and person data back
+re-label duplicate stations and species, and de-nomalize the station and person data back
 into the observations, to produce the observations dataframe that will be displayed.
 
 This code was adapted from the Jupyter notebook in which the dashboard was developed.
@@ -13,6 +13,7 @@ Written: May 2021
 Author: Tom Pollard
 """
 import re
+from datetime import datetime, date
 from collections import defaultdict
 
 import numpy as np
@@ -29,8 +30,10 @@ def load_observations(pg_url):
     people = pd.read_sql('select * from persons', db)
     observations = pd.read_sql('select * from observations', db)
 
+    # Remove sub-species IDs
     observations['species'] = [re.sub(r" \(.*$", "", name) for name in observations['species']]
 
+    # Replace redundant station IDs
     smr_station_ids = list([v for v in stations[stations['name'].str.contains('SMR')].fs_id])
 
     observations.loc[observations['station_id'] == '593550', 'station_id'] = '100000218'
@@ -39,6 +42,7 @@ def load_observations(pg_url):
     observations.loc[observations['station_id'] == '100000202', 'station_id'] = '100000215'
     smr_station_ids = [v for v in smr_station_ids if v != '100000202']
 
+    # De-normalize the station and person data into the observations
     obs_and_name = pd.merge(
          observations, 
          people[['fs_id', 'name']], 
@@ -53,17 +57,25 @@ def load_observations(pg_url):
                          'species', 'call_intensity', 'temperature', 'beaufort_wind', 
                          'name_observer', 'name_station', 'lat', 'lon']]
     
+    # Convert observation times to datetimes
     observations = observations.assign(
-        start_time=pd.to_datetime(observations['start_time'], utc=True))
+        obs_datetime=pd.to_datetime(observations['start_time'], utc=True))
 
+    # Add additional date-related fields, to upport time histograms
+    observations['obs_week'] = observations['obs_datetime'].apply(lambda dt: dt.date().isocalendar()[1]) # int 0-52
+    observations['obs_month'] = observations['obs_datetime'].apply(lambda dt: dt.month) # int 1-12
+    observations['obs_year_month'] = observations['obs_datetime'].apply(
+        lambda dt: datetime(year=dt.year, month=dt.month, day=1)) # date
+
+    # Select just the observations from SMR
     smr_observations = observations[
             observations['station_id'].isin(smr_station_ids) & 
-            (observations['start_time'].apply(lambda ts: ts.year) >= 2010)
-    ].sort_values(by=['start_time'], ascending=False)
+            (observations['obs_datetime'].apply(lambda ts: ts.year) >= 2010)
+    ].sort_values(by=['obs_datetime'], ascending=False)
     
     station_data = defaultdict(list)
 
-    # create an entry for every station in the given observations
+    # Create a dataframe for just the stations found in the SMR observations
     for station_id, obs_ids in smr_observations.groupby(['station_id']).groups.items():
         obs = smr_observations.loc[obs_ids[0]]
         station_data['station_id'].append(station_id)

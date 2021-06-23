@@ -3,12 +3,13 @@ This is the code to create the main dashboard display.
 """
 import os
 import math
-from datetime import datetime
+from datetime import datetime, date
 
 from bokeh.plotting import figure
 from bokeh.models import ColumnDataSource
-from bokeh.models import HoverTool, PanTool, WheelZoomTool, ResetTool, TapTool
+from bokeh.models import HoverTool, PanTool, WheelZoomTool, BoxZoomTool, ResetTool, TapTool
 from bokeh.models import DataTable, DateFormatter, TableColumn
+from bokeh.models import DatetimeTickFormatter
 from bokeh.models import Circle, Paragraph
 from bokeh.layouts import layout
 
@@ -25,6 +26,10 @@ GMAP_API_KEY = "AIzaSyD4IiUSTkgTTe800sjX5LIuVhUsAFsRqG4"
 
 # local database connection string.  On Heroku we'll get this from $DATABASE_URL
 DEFAULT_DATABASE_URL = "postgresql://pollard@localhost:5432/frogwatch"
+
+MONTH = [""] + [date(2000, v, 1).strftime('%b') for v in range(1, 13)]
+MONTH_MILLIS = 30 * 24 * 60 * 60 * 1000
+
 
 pg_url = os.getenv("DATABASE_URL", default=DEFAULT_DATABASE_URL)
 print(f"DATABASE_URL: {pg_url}")
@@ -46,6 +51,22 @@ print(f"{len(selected_observers)} observers")
 
 def now():
     return datetime.now().isoformat()
+
+def year_start(dt):
+    return dt.replace(month=1, day=1, hour=0, minute=0, second=0)
+
+def year_end(dt):
+    return dt.replace(month=12, day=31, hour=0, minute=0, second=0)
+    
+min_obs_time = year_start(min(smr_observations['obs_datetime']))
+max_obs_time = year_end(max(smr_observations['obs_datetime']))
+max_year_month_count = max(smr_observations.groupby('obs_year_month').size())
+max_week_count = max(smr_observations.groupby('obs_week').size())
+max_month_count = max(smr_observations.groupby('obs_month').size())
+
+full_date_range = [min_obs_time, max_obs_time]
+selected_date_range = list(full_date_range)
+
 
 def something_changed(attrname, old, new):
     print(attrname + " " + repr(old))
@@ -124,6 +145,13 @@ def update_panels():
         obs_table.source = obs_source(filtered_observations)
         species_table.source=species_source(filtered_observations)
         people_table.source=people_source(filtered_observations)
+
+        obs_date_histogram.renderers[0].data_source.data = dict(obs_time_source(filtered_observations).data)
+        obs_date_histogram.y_range.end = 1.1 * max(obs_date_histogram.renderers[0].data_source.data['count'])
+
+        obs_month_histogram.renderers[0].data_source.data = dict(obs_month_source(filtered_observations).data)
+        obs_month_histogram.y_range.end = 1.1 * max(obs_month_histogram.renderers[0].data_source.data['count'])
+
         updating = False
 
 
@@ -199,6 +227,68 @@ def people_source(observations):
     column_source.selected.on_change('indices', observer_selected)
     return column_source
 
+       
+def obs_time_source(observations):
+    by_year_month = observations.groupby('obs_year_month')
+    months = list(by_year_month.groups.keys())
+    column_source = ColumnDataSource(
+        data=dict(
+            obs_year_month=months,
+            date=[v.strftime('%b %Y') for v in months],
+            count=list(by_year_month.size().values)
+        )
+    )
+    # print(column_source.__dict__)
+    return column_source
+     
+def obs_month_source(observations):
+    by_month = {month: 0 for month in range(1,13)}
+    for month, obs in observations.groupby('obs_month'):
+        by_month[month] = len(obs)
+    column_source = ColumnDataSource(
+        data=dict(
+            obs_month=list(by_month.keys()),
+            month=[MONTH[v] for v in by_month.keys()],
+            count=list(by_month.values())
+        )
+    )
+    return column_source
+
+def create_date_histogram(observations):
+    date_hover = HoverTool(tooltips=[
+        ("month", "@date"),
+        ("obs", "@count"),
+    ])
+    date_zoom = BoxZoomTool(dimensions="width")
+
+    histogram = figure(x_range=(min_obs_time, max_obs_time), y_range=(0, max_year_month_count*1.1), 
+             width=810, height=160, x_axis_type="datetime", 
+             tools=[date_hover, date_zoom, PanTool(dimensions="width"), ResetTool()],
+             active_drag=date_zoom,
+             title="Observations by Year and Month")
+
+    histogram.vbar(x='obs_year_month', top='count', bottom=0, width=MONTH_MILLIS * 0.8, 
+         source=obs_time_source(observations))
+    histogram.xaxis[0].formatter = DatetimeTickFormatter(months="%b %Y")
+    return histogram
+
+
+def create_month_histogram(observations):
+    month_hover = HoverTool(tooltips=[
+        ("month", "@month"),
+        ("obs", "@count"),
+    ])
+
+    histogram = figure(x_range=(1, 12), y_range=(0, max_month_count*1.1), 
+                      width=810, height=160, 
+                      tools=[month_hover],
+                      title="Observations by Month")
+    histogram.vbar(x='obs_month', top='count', bottom=0, width=0.8, 
+                  source=obs_month_source(observations))
+    # print(obs_date_histogram.y_range)
+    return histogram
+
+
 def create_station_map(station_source, api_key):
     """ SMR station map."""
     map_options = GMapOptions(lat=40.752, lng=-74.294, map_type="terrain", zoom=14)
@@ -251,7 +341,7 @@ species_columns = [
 
 species_table = DataTable(source=species_source(smr_observations), 
                           columns=species_columns, 
-                          width=400, height=240, margin=(30, 5, 5, 5), 
+                          width=400, height=280, margin=(30, 5, 5, 5), 
                           index_position=None)
 # Observers table
 people_columns = [
@@ -263,10 +353,12 @@ people_columns = [
 
 people_table = DataTable(source=people_source(smr_observations), 
                           columns=people_columns, 
-                          width=400, height=320, margin=(30, 5, 5, 5), 
+                          width=400, height=240, margin=(30, 5, 5, 5), 
                           index_position=None)
 
 station_map = create_station_map(station_source, GMAP_API_KEY)
+obs_date_histogram = create_date_histogram(smr_observations)
+obs_month_histogram = create_month_histogram(smr_observations)
 obs_table = create_observations_table()
 # species_table = create_species_table()
 # people_table = create_people_table()
@@ -276,6 +368,7 @@ status.text = "all observations"
 print(status.text)
 
 curdoc().add_root(layout(
-    [[station_map, [species_table, people_table]], [obs_table], [status]])
+    [[station_map, [species_table, people_table]], [obs_date_histogram],
+        [obs_month_histogram], [obs_table], [status]])
 )
 
