@@ -171,7 +171,7 @@ station_source.selected.on_change('indices', stations_selected)
 def obs_source(observations):
     column_source = ColumnDataSource(
         data=dict(
-            obs_time=observations['start_time'],
+            obs_time=observations['obs_datetime'],
             station=observations['name_station'],
             observer=observations['name_observer'],
             species=observations['species'],
