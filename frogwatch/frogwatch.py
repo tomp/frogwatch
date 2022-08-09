@@ -6,8 +6,10 @@ Author: Tom Pollard
 Created: March 2021
 """
 from typing import Optional
+from pathlib import Path
 import sys
 import json
+import csv
 from datetime import datetime, time
 from collections import defaultdict
 from operator import attrgetter
@@ -24,10 +26,17 @@ from . import db_postgres as db
 
 DEFAULT_DB_URI = "postgresql://pollard@localhost:5432/frogwatch"
 
+CSV_TYPE = ".csv"
+TEXT_TYPE = ".txt"
+SUPPORTED_FILETYPES = (TEXT_TYPE, CSV_TYPE)
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
 logger = logging.getLogger()
+
+
+class UsageError(Exception):
+    """A UsageError is raised when there's a problem with the commandline arguments."""
 
 
 def fahrenheit(celsius: float) -> Optional[float]:
@@ -151,9 +160,39 @@ def load_schema(body: dict) -> dict[str, dict[str, str]]:
     return labels
 
 
+def observations_as_text(observations: list[Observation], reverse: bool = True) -> str:
+    lines = []
+    for obs in sorted(
+        observations.values(), key=attrgetter("start_time"), reverse=reverse
+    ):
+        lines.append(
+            f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
+            f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
+            f"{obs.observer.name:20s}  "
+            f"{obs.species}"
+        )
+    return "\n".join(lines)
+
+
+def write_csv(observations: list[Observation], fp, reverse: bool = True) -> None:
+    wtr = csv.writer(fp)
+    wtr.writerow(("Date", "Station", "Observer", "Species", "Intensity"))
+    for obs in sorted(
+        observations.values(), key=attrgetter("start_time"), reverse=reverse
+    ):
+        wtr.writerow((
+            obs.start_time.strftime('%Y-%m-%d %H:%M:00+0400'),
+            obs.station.name.replace('South Mountain Reservation', 'SMR'),
+            obs.observer.name,
+            obs.species,
+            obs.call_intensity
+        ))
+
+
 def parse_args():
     """Parse the commandline arguments.  A Namespace object is returned."""
     parser = configargparse.ArgumentParser()
+    parser.add_argument("--outfile", help="An output file for the selected observations")
     parser.add_argument(
         "--db", action="store_true", help="Write downloaded data to the database."
     )
@@ -193,6 +232,13 @@ def parse_args():
         opt.start_date = datetime.strptime(opt.start_date, "%Y-%m-%d")
     if opt.end_date:
         opt.end_date = datetime.strptime(opt.end_date, "%Y-%m-%d")
+
+    if opt.outfile:
+        opt.file_type = Path(opt.outfile).suffix.lower()
+        if not opt.file_type:
+            opt.file_type = "txt"
+        elif not opt.file_type in SUPPORTED_FILETYPES:
+            raise UsageError(f"unsupported file type '{opt.file_type}'")
 
     return opt
 
@@ -259,16 +305,16 @@ def main() -> int:
     db.update_stations(client, stations)
     db.update_observations(client, observations)
 
-    for obs in sorted(
-        observations.values(), key=attrgetter("start_time"), reverse=True
-    ):
-        if not opt.quiet:
-            logger.info(
-                f"{obs.start_time.strftime('%Y-%m-%d  %H:%M')} : "
-                f"{obs.station.name.replace('South Mountain Reservation', 'SMR'):40s}  "
-                f"{obs.observer.name:20s}  "
-                f"{obs.species}"
-            )
+    if opt.outfile:
+        with Path(opt.outfile).open('w') as fp:
+            if opt.file_type == CSV_TYPE:
+                    write_csv(observations, fp)
+            elif opt.file_type == TEXT_TYPE:
+                fp.write(observations_as_text(observations))
+                fp.write()
+        logger.info(f"Wrote {opt.outfile}")
+    else:
+        logger.info(observations_as_text(observations))
 
     return 0
 
