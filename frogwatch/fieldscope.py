@@ -8,10 +8,10 @@ LonLat = list[float, float]
 Geofence = list[LonLat]
 
 # constants
-API_PREFIX = "https://frogwatch.next.fieldscope.org/api/v3/"
+API_PREFIX = "https://frogwatch.fieldscope.org/api/v3/"
 SCHEMA_URL = API_PREFIX + "schema/frogwatch/"
 QUERY_URL = SCHEMA_URL + "query?f=json"
-STATIONS_URL = API_PREFIX + "station/?schema=frogwatch&sessionid=&f=pjson"
+STATIONS_URL = API_PREFIX + "station/?schema=frogwatch&sessionid=&f=json"
 
 ALL_FIELDS = [
     "City",
@@ -251,6 +251,8 @@ def query_body(
         return {}
 
     return {
+        "dataSource": 5,
         "fields": ALL_FIELDS,
+        "limit": 5000,
         "filters": filters,
     }

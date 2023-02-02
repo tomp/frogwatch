@@ -79,6 +79,8 @@ def load_station(
         owner=station_owner,
     )
     stations[station.fs_id] = station
+    if 'hartshorne' in station.name.lower():
+        logger.debug(f"{station.fs_id:5s}:  '{station.name}")
 
     for obs in item["observations"]:
         try:
