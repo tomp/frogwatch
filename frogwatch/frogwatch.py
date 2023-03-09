@@ -21,10 +21,8 @@ import requests
 from .version import __version__
 from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, STATIONS_URL, SMR_OUTLINE
 from .models import Station, Person, Observation, FS_id
-from . import db_postgres as db
+from . import db_sqlite as db
 
-
-DEFAULT_DB_URI = "postgresql://pollard@localhost:5432/frogwatch"
 
 CSV_TYPE = ".csv"
 TEXT_TYPE = ".txt"
@@ -200,7 +198,7 @@ def parse_args():
     )
     parser.add_argument(
         "--db-uri",
-        default=DEFAULT_DB_URI,
+        default=db.DEFAULT_DB_URI,
         env_var="DATABASE_URL",
         help="A Postgres connection URI specifying the DB to use.",
     )
