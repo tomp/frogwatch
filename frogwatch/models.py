@@ -14,14 +14,16 @@ class Person:
     """A Person is a station owner or an observer."""
 
     fs_id: FS_id  # the fieldscope id for this person
-    first_name: str  # their first name
-    last_name: str  # their last name
-    email: str  # their email address
+    first_name: str = ""  # their first name
+    last_name: str = ""   # their last name
+    email: str = ""   # their email address
 
     @property
     def name(self):
         """Return the person's full name."""
-        return self.first_name + " " + self.last_name
+        if self.first_name or self.last_name:
+            return self.first_name + " " + self.last_name
+        return f"<user {self.fs_id}>"
 
 
 @dataclass

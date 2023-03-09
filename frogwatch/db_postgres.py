@@ -6,6 +6,9 @@ import psycopg2 as pg
 from .models import FS_id, Person, Station, Observation
 
 
+# Constants
+DEFAULT_DB_URI = "postgresql://pollard@localhost:5432/frogwatch"
+
 # SQL
 CREATE_PERSONS_TABLE: str = """
 CREATE TABLE IF NOT EXISTS persons (

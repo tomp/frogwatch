@@ -2,9 +2,12 @@
 Data models for the Frogwatch project.
 """
 import sqlite3
+import re
 
 from .models import FS_id, Person, Station, Observation
 
+# Constants
+DEFAULT_DB_URI = "frogwatch.db"
 
 # SQL
 ENABLE_FOREIGN_KEYS: str = "PRAGMA foreign_keys = ON;"
@@ -60,11 +63,23 @@ CREATE TABLE IF NOT EXISTS observations (
 )
 """.strip()
 
+FILE_URI_RE = re.compile(r"""
+    ^file: (?://(?:localhost)?/)? ( [^/]+ (?:/[^/]+)* )$
+    """, re.VERBOSE)
 
 def connect(dbfile):
-    """Open a connection to the databae in the given file."""
-    if dbfile.startswith("file:"):
-        dbfile = dbfile[5:]
+    """Open a connection to the database in the given file.
+    Valid file: URI's include
+        file://localhost/path/to/file.db
+        file:///path/to/file.db
+        file:/path/to/file.db
+        file:file.db
+    To specify a local file in the CWD, just specify the filename.
+    """
+    m = FILE_URI_RE.match(dbfile)
+    if m:
+        dbfile = m.group(1)
+    print(f"dbfile: {dbfile}")
     return sqlite3.connect(dbfile)
 
 

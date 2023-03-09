@@ -10,8 +10,10 @@ Geofence = list[LonLat]
 # constants
 API_PREFIX = "https://frogwatch.fieldscope.org/api/v3/"
 SCHEMA_URL = API_PREFIX + "schema/frogwatch/"
+USER_URL = API_PREFIX + "user/"
 QUERY_URL = SCHEMA_URL + "query?f=json"
-STATIONS_URL = API_PREFIX + "station/?schema=frogwatch&sessionid=&f=json"
+# STATIONS_URL = API_PREFIX + "station/?schema=frogwatch&sessionid=&f=json"
+STATIONS_URL = API_PREFIX + "station/?schema=frogwatch"
 
 ALL_FIELDS = [
     "City",

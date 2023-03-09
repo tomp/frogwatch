@@ -13,13 +13,17 @@ import csv
 from datetime import datetime, time
 from collections import defaultdict
 from operator import attrgetter
+from pprint import pformat
 import logging
 
 import configargparse
 import requests
+import jsonpath_rw as jsonpath
 
 from .version import __version__
-from .fieldscope import query_body, QUERY_URL, SCHEMA_URL, STATIONS_URL, SMR_OUTLINE
+from .fieldscope import (
+    query_body, QUERY_URL, SCHEMA_URL, USER_URL, STATIONS_URL, SMR_OUTLINE
+)
 from .models import Station, Person, Observation, FS_id
 from . import db_sqlite as db
 
@@ -27,6 +31,19 @@ from . import db_sqlite as db
 CSV_TYPE = ".csv"
 TEXT_TYPE = ".txt"
 SUPPORTED_FILETYPES = (TEXT_TYPE, CSV_TYPE)
+
+# Debugging files
+SCHEMA_REQUEST_PATH = "frogwatch_schema_request.json"
+SCHEMA_RESULT_PATH = "frogwatch_schema_reponse.json"
+
+STATIONS_REQUEST_PATH = "frogwatch_stations_request.json"
+STATIONS_RESULT_PATH = "frogwatch_stations_reponse.json"
+
+QUERY_REQUEST_PATH = "frogwatch_query_request.json"
+QUERY_RESULT_PATH = "frogwatch_query_reponse.json"
+
+USER_AGENT="Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/110.0"
+
 
 # logging
 logging.basicConfig(format="%(message)s", stream=sys.stdout, level="INFO")
@@ -57,13 +74,7 @@ def load_station(
     """
     # pylint: disable=too-many-locals
 
-    owner2 = item["owner2"]
-    station_owner = Person(
-        fs_id=str(owner2["ownerId"]),
-        first_name=owner2.get("firstName"),
-        last_name=owner2.get("lastName"),
-        email=owner2.get("email"),
-    )
+    station_owner = Person(fs_id=str(item["ownerId"]))
     people[station_owner.fs_id] = station_owner
 
     station = Station(
@@ -139,24 +150,24 @@ def load_station(
             logger.error(f"KeyError: {exc}\nobservation = {json.dumps(obs, indent=4)}")
 
 
-def load_schema(body: dict) -> dict[str, dict[str, str]]:
+ALL_FOLDERS_EXPR = jsonpath.parse("$..folders[*]")
+ALL_FIELDS_EXPR = jsonpath.parse("$..folders[*].fields[*]")
+
+def load_schema(schema: dict) -> dict[str, dict[str, str]]:
     """Load the mappings from the codes used in the database to the labels
     people are used to seeing, for the coded fields in the schema.
     Returns a dict mapping the field name to a dict mapping each db value to
     its label.
     """
     labels = defaultdict(dict)
-    for result in body["result"].values():
-        if not "folders" in result:
-            continue
-
-        for folder in result["folders"]:
-            for field in folder["fields"]:
-                if not field["values"]:
-                    continue
-                name = field["name"]
-                for item in field["values"]:
-                    labels[name][item["value"]] = item["label"]
+    for match in ALL_FIELDS_EXPR.find(schema):
+        field = match.value
+        field_name = field["name"]
+        logger.debug(f"{match.full_path}:\t{field_name} \t--> {field['label']}")
+        if field.get('values'):
+            for item in field['values']:
+                field_value, value_label = item['value'], item['label']
+                labels[field_name][field_value] = value_label
     return labels
 
 
@@ -243,6 +254,25 @@ def parse_args():
     return opt
 
 
+def store_response(resp: requests.Request, request_file: str = None, response_file: str = None):
+    """Store the request and/or response for an API request.  The 'resp' is the
+    requests.Request object, after the request has completed.
+    """
+    if request_file:
+        req = resp.request
+        req_parts = {
+            "url": req.url,
+            "method": req.method,
+            "headers": req.headers,
+            "body": req.body,
+        }
+        Path(request_file).write_text(pformat(req_parts, indent=4, width=240))
+        logger.info(f"Wrote {request_file}")
+    if response_file:
+        Path(response_file).write_text(pformat(resp.json(), indent=4, width=240))
+        logger.info(f"Wrote {response_file}")
+
+
 def main() -> int:
     """The toplevel function.  An exitcode is returned."""
     opt = parse_args()
@@ -253,7 +283,19 @@ def main() -> int:
     client = db.connect(opt.db_uri)
     db.create_tables(client)
 
-    resp = requests.get(SCHEMA_URL)
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": USER_AGENT, 
+        "csrftoken": "chQ4Ft5MQDn6bVHCA29SI7MJcTUfh2R9Lsd4Rt2XaVaLvSw4XlWp01CIyS6bPg5m",
+        "sessionid": "iby34pnw93l1o62403y39xvno421r6tn",
+     })
+
+    logger.debug(f"FROGWATCH_SCHEMA_URL: \t{SCHEMA_URL}")
+    resp = session.get(SCHEMA_URL)
+
+    if opt.debug:
+        store_response(resp, SCHEMA_REQUEST_PATH, SCHEMA_RESULT_PATH)
+
     labels = load_schema(resp.json())
 
     outline, state, chapter = None, None, []
@@ -270,9 +312,11 @@ def main() -> int:
 
     # Stations query
     if opt.stations:
-        logger.debug(STATIONS_URL)
-        resp = requests.get(STATIONS_URL)
+        logger.debug(f"FROGWATCH_STATIONS_URL: \t{STATIONS_URL}")
+        resp = session.get(STATIONS_URL)
         logger.debug(f"stations request returned status {resp.status_code}")
+        if opt.debug:
+            store_response(resp, STATIONS_REQUEST_PATH, STATIONS_RESULT_PATH)
         resp.raise_for_status()
 
         for item in resp.json()["result"]:
@@ -287,10 +331,11 @@ def main() -> int:
         start_date=opt.start_date,
         end_date=opt.end_date,
     )
-    logger.debug(QUERY_URL)
-    logger.debug(json.dumps(query, indent=4))
-    resp = requests.post(QUERY_URL, json=query)
+    logger.debug(f"FROGWATCH_QUERY_URL: \t{QUERY_URL}")
+    resp = session.post(QUERY_URL, json=query)
     logger.debug(f"query returned status {resp.status_code}")
+    if opt.debug:
+        store_response(resp, QUERY_REQUEST_PATH, QUERY_RESULT_PATH)
     resp.raise_for_status()
 
     if not "result" in resp.json():
@@ -313,7 +358,7 @@ def main() -> int:
                 fp.write(observations_as_text(observations))
                 fp.write()
         logger.info(f"Wrote {opt.outfile}")
-    else:
+    elif not opt.quiet:
         logger.info(observations_as_text(observations))
 
     return 0
