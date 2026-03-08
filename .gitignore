@@ -1,0 +1,13 @@
+# vim
+*~
+*.swp
+*.swo
+
+# python
+*.pyc
+
+# uv
+.venv
+
+*.tgz
+

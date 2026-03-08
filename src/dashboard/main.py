@@ -16,6 +16,10 @@ from bokeh.layouts import layout
 from bokeh.plotting import gmap, curdoc
 from bokeh.models import GMapOptions
 
+# import psycopg2 as pg
+
+# from . import db_postgres as db
+from . import db_sqlite as db
 from .data import load_observations
 
 print("Peep, peep, peep!")
@@ -25,16 +29,17 @@ print("Peep, peep, peep!")
 GMAP_API_KEY = "AIzaSyD4IiUSTkgTTe800sjX5LIuVhUsAFsRqG4"
 
 # local database connection string.  On Heroku we'll get this from $DATABASE_URL
-DEFAULT_DATABASE_URL = "postgresql://pollard@localhost:5432/frogwatch"
+# DEFAULT_DATABASE_URL = "postgresql://pollard@localhost:5432/frogwatch"
+DEFAULT_DATABASE_URL = "frogwatch.db"
 
 MONTH = [""] + [date(2000, v, 1).strftime('%b') for v in range(1, 13)]
 MONTH_MILLIS = 30 * 24 * 60 * 60 * 1000
 
 
-pg_url = os.getenv("DATABASE_URL", default=DEFAULT_DATABASE_URL)
-print(f"DATABASE_URL: {pg_url}")
+db_url = os.getenv("DATABASE_URL", default=DEFAULT_DATABASE_URL)
+print(f"DATABASE_URL: {db_url}")
 
-station_obs, smr_observations = load_observations(pg_url)
+station_obs, smr_observations = load_observations(db_url)
 
 all_stations = set(station_obs['name'])
 selected_stations = all_stations

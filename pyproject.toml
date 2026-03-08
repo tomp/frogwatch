@@ -1,0 +1,37 @@
+[project]
+name = "frogwatch"
+version = "0.5.0"
+description = "Provide local analysis of Frogwatch data from Fieldscope"
+authors = [{ name = "Tom Pollard", email = "pollard@alum.mit.edu" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "attrs",
+    "bokeh",
+    "ConfigArgParse",
+    "ipywidgets",
+    "jupyter",
+    "jupyterlab-widgets",
+    "numpy",
+    "pandas",
+    "psycopg2-binary",
+    "requests",
+    "jsonpath_rw",
+    "sqlalchemy>=2.0.48",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyright",
+    "pylint",
+    "pytest",
+    "black",
+]
+
+[project.scripts]
+frogwatch = "frogwatch.frogwatch:main"
+
+[build-system]
+requires = ["uv_build>=0.6,<1"]
+build-backend = "uv_build"

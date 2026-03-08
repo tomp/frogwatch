@@ -18,17 +18,14 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-import psycopg2 as pg
 
 
-def load_observations(pg_url):
+def load_observations(client):
     """Return dataframes representing the stations and observations to display."""
 
-    db = pg.connect(pg_url)
-
-    stations = pd.read_sql('select * from stations', db)
-    people = pd.read_sql('select * from persons', db)
-    observations = pd.read_sql('select * from observations', db)
+    stations = pd.read_sql('select * from stations', client)
+    people = pd.read_sql('select * from persons', client)
+    observations = pd.read_sql('select * from observations', client)
 
     # Remove sub-species IDs
     observations['species'] = [re.sub(r" \(.*$", "", name) for name in observations['species']]

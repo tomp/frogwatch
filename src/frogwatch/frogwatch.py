@@ -25,7 +25,8 @@ from .fieldscope import (
     query_body, QUERY_URL, SCHEMA_URL, USER_URL, STATIONS_URL, SMR_OUTLINE
 )
 from .models import Station, Person, Observation, FS_id
-from . import db_sqlite as db
+from . import db_postgres as db
+# from . import db_sqlite as db
 
 
 CSV_TYPE = ".csv"
@@ -285,7 +286,7 @@ def main() -> int:
 
     session = requests.Session()
     session.headers.update({
-        "User-Agent": USER_AGENT, 
+        "User-Agent": USER_AGENT,
         "csrftoken": "chQ4Ft5MQDn6bVHCA29SI7MJcTUfh2R9Lsd4Rt2XaVaLvSw4XlWp01CIyS6bPg5m",
         "sessionid": "iby34pnw93l1o62403y39xvno421r6tn",
      })

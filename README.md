@@ -1,38 +1,51 @@
 Frogwatch
 =========
 
-This app creates a web-based dashboard for Frogwatch observations from
-South Mountain Reservation, Essex County, NJ.  It is a Python app that
-uses Pandas and Bokeh to display FrogWatch observation data that has
-been downloaded into a normalized Postgres database.  It is currently
-configured to run as a Heroku application, named 'frogwatch'.
+This app downloads Frogwatch observations from Fieldscope into a local database, and
+provides a dashboard for visualizing those observations.
+
+While it can download Fieldscope data for any locations, the dashboard just
+presents data for in South Mountain Reservation, Essex County, NJ.
+
+The dashboard can run locally as a Jupyter notebook, or as a web app on Heroku.
 
 
 Installation
 ------------
-These instructions assume that you have python 3.9, postgres 9.5 (or
-later) and the heroku cli tool installed, already.
+These instructions assume that you have python 3.9, postgres 9.5 (or later) and the
+heroku cli tool installed, already.
 
-1. Create a virtual env (named FROG) to hold the python dependencies for the
-   project, using the following commands:
+Initialize the virtual env with the python dependencies for the project, using the
+following command
 
-     python -m venv FROG
-     . FROG/bin/activate
-     pip install --upgrade pip setuptools
+     uv sync
 
-2. Install the dependencies
 
-     pip install -r requirements.txt
+Database
+--------
+Set the DATABASE_URL parameter in frogwatch/settings.py to point to the local copy
+of the frogwatch database.  For me, this is usually either a Postgres database or an
+SQLite database
 
-3. Update the DATABASE_URL setting in frogwatch/settings.py to point to
-   the local copy of the frogwatch database (named "frogwatch", here).
-   For example, for a local Postgres db, this might be
+When deployed on Heroku, a DATABASE_URL environment variable will automatically be
+defined to point to the production db.
+
+#### Postgres
+For a local Postgres db, set the database URL as follows. (the username, password and
+database name here are just examples.)
 
      DATABASE_URL = "postgres://{user}:{passwd}@{host}:{port}/{database}".format(
         user="frogger", passwd="s3cre7", host="127.0.0.1", port="5432", database="frogwatch")
 
-   (When deployed on Heroku, a DATABASE_URL environment variable will
-   automatically be defined to point to the production db.)
+#### SQLite
+
+
+#### Heroku
+
+
+
+FieldScope Data
+---------------
 
 3. Initialize the database.  If you have an existing Postgres db on
    Heroku, you can clone it locally using the command

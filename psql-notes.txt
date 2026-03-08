@@ -1,0 +1,10 @@
+PSQL Notes
+==========
+
+delete from stations where fs_id not in (select distinct station_id from observations);
+
+delete from persons where fs_id not in (select distinct observer_id from observations);
+
+VACUUM (VERBOSE, ANALYZE);
+
+
