@@ -126,7 +126,10 @@ def _(alt, altair_tiles, math, mo, pd, station_obs, xyzservices):
         height=380,
     )
 
-    _tiled = altair_tiles.add_tiles(_chart, xyzservices.providers.CartoDB.Positron).add_params(
+    _tile_provider = xyzservices.providers.CartoDB.Positron
+    _tile_provider = xyzservices.providers.USGS.USTopo
+
+    _tiled = altair_tiles.add_tiles(_chart, _tile_provider).add_params(
         _selection
     )
     station_chart = mo.ui.altair_chart(_tiled, chart_selection='point')
