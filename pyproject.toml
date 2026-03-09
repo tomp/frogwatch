@@ -21,6 +21,7 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "marimo",
     "altair",
+    "altair_tiles",
     "anthropic>=0.84.0",
     "pydantic-ai-slim>=0.8.1",
 ]

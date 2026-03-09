@@ -15,7 +15,34 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    #### Load observations
+    ### Observations
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(
+    date_hist,
+    mo,
+    month_hist,
+    obs_table,
+    observer_table,
+    species_table,
+    station_chart,
+):
+    mo.vstack([
+        mo.hstack([station_chart, mo.vstack([species_table, observer_table])]),
+        date_hist,
+        month_hist,
+        obs_table,
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Data loader
     """)
     return
 
@@ -28,9 +55,11 @@ def _():
     from datetime import date
 
     import altair as alt
+    import altair_tiles
     import pandas as pd
     import sqlalchemy
     import marimo as mo
+    import xyzservices
 
     # Add src/ to path so we can import dashboard.data
     _src = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src')
@@ -39,7 +68,18 @@ def _():
 
     from dashboard.data import load_observations
 
-    return alt, date, load_observations, math, mo, os, pd, sqlalchemy
+    return (
+        alt,
+        altair_tiles,
+        date,
+        load_observations,
+        math,
+        mo,
+        os,
+        pd,
+        sqlalchemy,
+        xyzservices,
+    )
 
 
 @app.cell
@@ -52,7 +92,7 @@ def _(load_observations, os, sqlalchemy):
 
 
 @app.cell
-def _(alt, math, mo, station_obs):
+def _(alt, altair_tiles, math, mo, pd, station_obs, xyzservices):
     _station_data = station_obs.copy()
     _station_data['size'] = _station_data['observations'].apply(
         lambda v: 15 + 5 * math.log(v + 1)
@@ -60,29 +100,45 @@ def _(alt, math, mo, station_obs):
 
     _selection = alt.selection_point(fields=['name'])
 
-    _chart = alt.Chart(_station_data).mark_circle().encode(
-        x=alt.X('lon:Q', title='Longitude', scale=alt.Scale(zero=False)),
-        y=alt.Y('lat:Q', title='Latitude', scale=alt.Scale(zero=False)),
+    _lon_pad = (_station_data['lon'].max() - _station_data['lon'].min()) * 0.10
+    _lat_pad = (_station_data['lat'].max() - _station_data['lat'].min()) * 0.10
+    _padding = pd.DataFrame({
+        'lon': [_station_data['lon'].min() - _lon_pad, _station_data['lon'].max() + _lon_pad] * 2,
+        'lat': [_station_data['lat'].min() - _lat_pad] * 2 + [_station_data['lat'].max() + _lat_pad] * 2,
+    })
+    _padding_layer = alt.Chart(_padding).mark_point(opacity=0, size=0).encode(
+        longitude='lon:Q',
+        latitude='lat:Q',
+    )
+
+    _circles = alt.Chart(_station_data).mark_circle().encode(
+        longitude='lon:Q',
+        latitude='lat:Q',
         size=alt.Size('observations:Q', legend=None),
         color=alt.condition(_selection, alt.value('violet'), alt.value('lightgray')),
         opacity=alt.condition(_selection, alt.value(0.9), alt.value(0.4)),
         tooltip=['name:N', 'observations:Q'],
-    ).add_params(
-        _selection
-    ).properties(
+    )
+
+    _chart = alt.layer(_padding_layer, _circles).project('mercator').properties(
         title='South Mountain Reservation Stations',
         width=400,
         height=380,
     )
 
-    station_chart = mo.ui.altair_chart(_chart, chart_selection='point')
+    _tiled = altair_tiles.add_tiles(_chart, xyzservices.providers.CartoDB.Positron).add_params(
+        _selection
+    )
+    station_chart = mo.ui.altair_chart(_tiled, chart_selection='point')
     return (station_chart,)
 
 
 @app.cell
 def _(smr_observations, station_chart):
+    import typing
+
     _selected = station_chart.value
-    if _selected is not None and len(_selected) > 0:
+    if isinstance(_selected, typing.Sequence):
         _names = set(_selected['name'])
         obs_by_station = smr_observations[smr_observations['name_station'].isin(_names)]
     else:
@@ -230,33 +286,6 @@ def _(alt, date, filtered_obs, pd):
         height=160,
     )
     return (month_hist,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    #### Display observation statistics
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _(
-    date_hist,
-    mo,
-    month_hist,
-    obs_table,
-    observer_table,
-    species_table,
-    station_chart,
-):
-    mo.vstack([
-        mo.hstack([station_chart, mo.vstack([species_table, observer_table])]),
-        date_hist,
-        month_hist,
-        obs_table,
-    ])
-    return
 
 
 if __name__ == "__main__":
