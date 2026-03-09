@@ -5,7 +5,7 @@ This app downloads Frogwatch observations from Fieldscope into a local database,
 provides a dashboard for visualizing those observations.
 
 While it can download Fieldscope data for any locations, the dashboard just
-presents data for in South Mountain Reservation, Essex County, NJ.
+presents data for South Mountain Reservation, Essex County, NJ.
 
 The dashboard can run locally as a Jupyter notebook, or as a web app on Heroku.
 

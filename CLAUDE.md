@@ -15,9 +15,11 @@ pytest                    # Run tests
 
 **Running the dashboard (notebook — current version):**
 ```bash
-jupyter notebook "notebooks/Frogwatch v3.ipynb"
+uv run marimo edit notebooks/frogwatch_v3.py
+# or as a read-only app:
+uv run marimo run notebooks/frogwatch_v3.py
 ```
-The notebook connects to Postgres (`postgresql+psycopg2://pollard@localhost:5432/frogwatch`), loads observations, and renders a Bokeh interactive dashboard inline via `show(update_display)`.
+The notebook connects to Postgres (`postgresql+psycopg2://pollard@localhost:5432/frogwatch`) via the `DATABASE_URL` env var, loads observations via `dashboard/data.py`, and renders an interactive dashboard using marimo-native reactivity and Altair charts.
 
 **Running the dashboard (Heroku server):**
 ```bash
@@ -42,17 +44,19 @@ Two loosely coupled modules live under `src/`:
 - `models.py`: `Person`, `Station`, `Observation` dataclasses.
 - `db_sqlite.py` / `db_postgres.py`: Database backends with identical interfaces — `connect()`, `create_tables()`, `update_persons/stations/observations()`.
 
-### `notebooks/Frogwatch v3.ipynb` — current dashboard (notebook)
-Self-contained Jupyter notebook that is the active version of the dashboard. It:
-1. Loads `persons`, `stations`, `observations` from Postgres via SQLAlchemy.
-2. Normalizes species names (strips parenthetical subspecies) and reassigns a set of duplicate/aliased SMR station IDs to canonical ones.
-3. Denormalizes into a flat DataFrame (`smr_observations`) filtered to SMR stations and year ≥ 2010.
-4. Defines `update_display(doc)` which builds the full Bokeh app (GMap station map, species/observer/observation tables, year-month and month histograms) with cross-filtering via `ColumnDataSource.selected.on_change` callbacks.
-5. Calls `show(update_display)` to embed the Bokeh server inline.
+### `notebooks/frogwatch_v3.py` — current dashboard (marimo notebook)
+Marimo notebook that is the active version of the dashboard. It:
+1. Loads data via `dashboard/data.py:load_observations()` from Postgres.
+2. Displays an Altair scatter map (`mo.ui.altair_chart`) of SMR stations (lat/lon, sized by observation count).
+3. Cross-filters a species summary table → observer summary table → observations table using marimo reactive cells (no callbacks needed).
+4. Renders year-month and month bar histograms (Altair) that update with each filter step.
+5. Assembles everything in a final layout cell with `mo.vstack`/`mo.hstack`.
+
+The old `notebooks/Frogwatch v3.ipynb` (Jupyter/Bokeh) is kept for reference.
 
 ### `src/dashboard/` — Bokeh web dashboard (Heroku/server version)
 - `main.py`: Bokeh server app. Builds interactive map + tables + histograms with cross-filtering callbacks.
-- `data.py`: `load_observations()` — reads from DB, denormalizes persons/stations/observations into a flat DataFrame, filters to SMR and year ≥ 2010.
+- `data.py`: `load_observations()` — reads from DB, denormalizes persons/stations/observations into a flat DataFrame, filters to SMR and year ≥ 2010. Columns are renamed at load time: `fs_id` → `fs_id_station`/`fs_id_observer`, `name` → `name_station`/`name_observer`.
 - `models.py`, `db_sqlite.py`, `db_postgres.py`: Copies of the shared types/DB code (duplication is a known issue during refactor).
 
 ### Data flow
@@ -61,7 +65,7 @@ Fieldscope API → frogwatch.py → models → DB (SQLite or Postgres)
                                               ↓
                                      dashboard/data.py
                                               ↓
-                                     Bokeh server (main.py)
+                                     marimo notebook (frogwatch_v3.py)
 ```
 
 ### Database
