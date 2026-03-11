@@ -1,10 +1,33 @@
 PSQL Notes
 ==========
 
+Clean-up queries
+----------------
 delete from stations where fs_id not in (select distinct station_id from observations);
 
 delete from persons where fs_id not in (select distinct observer_id from observations);
 
 VACUUM (VERBOSE, ANALYZE);
 
+
+Queries
+-------
+## List people who posted at least one observation in 2026
+
+WITH t1 AS (
+  SELECT
+    observer_id,
+    COUNT(*) AS count
+  FROM observations
+  WHERE start_time LIKE '2025-%'
+  GROUP BY observer_id
+)
+SELECT
+  t2.name,
+  t2.email,
+  t1.count
+FROM persons t2
+INNER JOIN t1 ON t2.fs_id = t1.observer_id
+ORDER BY t1.count DESC
+;
 
