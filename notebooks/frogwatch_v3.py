@@ -15,7 +15,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ### Observations
+    ### Dashboard
     """)
     return
 
@@ -29,9 +29,11 @@ def _(
     observer_table,
     species_table,
     station_chart,
+    station_table,
 ):
     mo.vstack([
-        mo.hstack([station_chart, mo.vstack([species_table, observer_table])]),
+        mo.hstack([station_chart, station_table]), 
+        mo.hstack([species_table, observer_table]),
         date_hist,
         month_hist,
         obs_table,
@@ -121,7 +123,7 @@ def _(alt, altair_tiles, math, mo, pd, station_obs, xyzservices):
     )
 
     _chart = alt.layer(_padding_layer, _circles).project('mercator').properties(
-        title='South Mountain Reservation Stations',
+        title='South Mountain Reservation',
         width=400,
         height=380,
     )
@@ -146,7 +148,32 @@ def _(smr_observations, station_chart):
         obs_by_station = smr_observations[smr_observations['name_station'].isin(_names)]
     else:
         obs_by_station = smr_observations
+    obs_by_station
     return (obs_by_station,)
+
+
+@app.cell
+def _(mo, obs_by_station, pd):
+    def _station_summary(obs):
+        _by_station = obs.groupby('name_station')
+        _names = list(_by_station.size().sort_values(ascending=False).index)
+        _rows = []
+        for _sp in _names:
+            _grp = _by_station.get_group(_sp)
+            _rows.append({
+                'site': _sp,
+                'species': _grp['species'].nunique(),
+                'observations': len(_grp),
+                'observers': _grp['name_observer'].nunique(),
+            })
+        return pd.DataFrame(_rows)
+
+    station_table = mo.ui.table(
+        _station_summary(obs_by_station),
+        selection='multi',
+        label='Stations',
+    )
+    return (station_table,)
 
 
 @app.cell
