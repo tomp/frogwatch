@@ -275,17 +275,18 @@ def _(alt, filtered_obs):
     )
 
     date_hist = alt.Chart(_date_summary).mark_bar().encode(
-        x=alt.X('month:T', title='Month/Year', axis=alt.Axis(format='%b %Y')),
+        x=alt.X('month:O', title='Month/Year'),
         y=alt.Y('count:Q', title='Observations'),
         tooltip=[
-            alt.Tooltip('month:T', title='Month', format='%b %Y'),
+            alt.Tooltip('month:O', title='Month'),
             alt.Tooltip('count:Q', title='Observations'),
         ],
     ).properties(
         title='Observations by Year and Month',
-        width=800,
+        width=1000,
         height=160,
     )
+    _date_summary
     return (date_hist,)
 
 
@@ -312,10 +313,16 @@ def _(alt, date, filtered_obs, pd):
         ],
     ).properties(
         title='Observations by Month',
-        width=800,
+        width=1000,
         height=160,
     )
+    _month_summary
     return (month_hist,)
+
+
+@app.cell
+def _():
+    return
 
 
 if __name__ == "__main__":

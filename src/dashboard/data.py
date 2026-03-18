@@ -64,11 +64,13 @@ def load_observations(client):
     observations = observations.assign(
         obs_datetime=pd.to_datetime(observations['start_time'], utc=True))
 
-    # Add additional date-related fields, to upport time histograms
-    observations['obs_week'] = observations['obs_datetime'].apply(lambda dt: dt.date().isocalendar()[1]) # int 0-52
-    observations['obs_month'] = observations['obs_datetime'].apply(lambda dt: dt.month) # int 1-12
+    # Add additional date-related fields, to support time histograms
+    observations['obs_week'] = observations['obs_datetime'].apply(
+        lambda dt: dt.date().isocalendar()[1]) # int 0-52
+    observations['obs_month'] = observations['obs_datetime'].apply(
+        lambda dt: dt.month) # int 1-12
     observations['obs_year_month'] = observations['obs_datetime'].apply(
-        lambda dt: datetime(year=dt.year, month=dt.month, day=1)) # date
+        lambda dt: f"{dt.year:4d}-{dt.month:02d}") # string
 
     # Select just the observations from SMR
     smr_observations = observations[
