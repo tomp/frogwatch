@@ -10,7 +10,7 @@ frogwatch --help          # CLI entry point
 pylint src/               # Lint
 pyright src/              # Type check
 black src/                # Format
-pytest                    # Run tests
+pytest                    # Run tests (no test suite exists yet)
 ```
 
 **Running the dashboard (notebook — current version):**
@@ -34,12 +34,14 @@ frogwatch --hartshorne --db       # Download Hartshorne chapter data into DB
 frogwatch --smr --outfile out.csv # Download SMR observations as CSV
 ```
 
+**Key CLI flags:** `--nj`, `--smr`, `--hartshorne` (geo filters), `--db` / `--db-uri` (database output), `--outfile` (CSV output), `--stations` (download stations separately), `--start-date` / `--end-date` (date range).
+
 ## Architecture
 
-Two loosely coupled modules live under `src/`:
+Uses `uv` with `uv_build` backend (not setuptools). Python ≥3.9. Two loosely coupled modules live under `src/`:
 
 ### `src/frogwatch/` — CLI data downloader
-- `frogwatch.py`: Entry point (`main()`). Parses args, fetches from Fieldscope API, inserts into DB or exports CSV.
+- `frogwatch.py`: Entry point (`main()`). Parses args via `configargparse`, fetches from Fieldscope API, inserts into DB or exports CSV.
 - `fieldscope.py`: API URL constants, geofence definitions (SMR boundary polygon), and query body builder. Key filter functions: `area_filter()`, `state_filter()`, `chapter_filter()`, `date_filter()`.
 - `models.py`: `Person`, `Station`, `Observation` dataclasses.
 - `db_sqlite.py` / `db_postgres.py`: Database backends with identical interfaces — `connect()`, `create_tables()`, `update_persons/stations/observations()`.
@@ -72,6 +74,9 @@ Fieldscope API → frogwatch.py → models → DB (SQLite or Postgres)
 - Configured via `DATABASE_URL` env var (Postgres) or a local `.db` file (SQLite).
 - Tables: `persons`, `stations`, `observations`.
 - Inserts are idempotent — existing rows are skipped by checking `fs_id`.
+
+### Linting
+`.pylintrc` disables: `invalid-name`, `bad-continuation`, `bad-indentation`, `bad-whitespace`, `too-few-public-methods`, `logging-fstring-interpolation`, `logging-not-lazy`, `R0801` (duplicate-code).
 
 ### Deployment
 - `Procfile` + `runtime.txt` target Heroku.
