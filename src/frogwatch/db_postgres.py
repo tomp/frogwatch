@@ -1,13 +1,15 @@
 """
 Data models for the Frogwatch project.
 """
+import getpass
 import psycopg2 as pg
 
 from .models import FS_id, Person, Station, Observation
 
 
 # Constants
-DEFAULT_DB_URI = "postgresql://pollard@localhost:5432/frogwatch"
+USERNAME = getpass.getuser()
+DEFAULT_DB_URI = f"postgresql://{USERNAME}@localhost:5432/frogwatch"
 
 # SQL
 CREATE_PERSONS_TABLE: str = """

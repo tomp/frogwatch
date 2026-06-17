@@ -32,7 +32,7 @@ def _(
     station_table,
 ):
     mo.vstack([
-        mo.hstack([station_chart, station_table]), 
+        mo.hstack([station_chart, station_table]),
         mo.hstack([species_table, observer_table]),
         date_hist,
         month_hist,
@@ -85,8 +85,10 @@ def _():
 
 
 @app.cell
+import getpass
+USERNAME =  getpass.getuser()
 def _(load_observations, os, sqlalchemy):
-    _db_url = os.getenv("DATABASE_URL", "postgresql+psycopg2://pollard@localhost:5432/frogwatch")
+    _db_url = os.getenv("DATABASE_URL", f"postgresql+psycopg2://{USERNAME}@localhost:5432/frogwatch")
     _engine = sqlalchemy.create_engine(_db_url)
     station_obs, smr_observations = load_observations(_engine)
     # mo.md(f"Loaded **{len(smr_observations)}** observations from **{len(station_obs)}** stations.")
