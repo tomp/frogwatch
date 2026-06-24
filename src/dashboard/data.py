@@ -35,12 +35,16 @@ def load_observations(client):
 
     # Replace redundant station IDs
     smr_station_ids = list(
-        [v for v in stations[stations['name_station'].str.contains('SMR')].fs_id_station])
+        [v for v in stations[stations['name_station'].str.contains('SMR-')].fs_id_station])
 
-    observations.loc[observations['station_id'] == '593550', 'station_id'] = '100000218'
-    observations.loc[observations['station_id'] == '1480244', 'station_id'] = '100000219'
-    observations.loc[observations['station_id'] == '605236', 'station_id'] = '100000215'
-    observations.loc[observations['station_id'] == '100000202', 'station_id'] = '100000215'
+    observations.loc[observations['station_id'] == '100353194', 'station_id'] = '100000217'  # Crest Trail Vernal Pool
+    observations.loc[observations['station_id'] == '100012051', 'station_id'] = '100000218'  # Black Willow Pond
+    observations.loc[observations['station_id'] == '4975303', 'station_id'] = '100000219'    # Elmdale Vernal Pools
+
+    observations.loc[observations['station_id'] == '593550', 'station_id'] = '100000218'     # Black Willow Pond
+    observations.loc[observations['station_id'] == '1480244', 'station_id'] = '100000219'    # Elmdale Vernal Pools
+    observations.loc[observations['station_id'] == '605236', 'station_id'] = '100000215'     # Campbell's Pond
+    observations.loc[observations['station_id'] == '100000202', 'station_id'] = '100000215'  # Campbell's Pond
     smr_station_ids = [v for v in smr_station_ids if v != '100000202']
 
 
