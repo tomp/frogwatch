@@ -111,6 +111,11 @@ def _(duckdb, getpass, load_observations, os):
             con.execute("INSTALL postgres; LOAD postgres;")
             con.execute(f"ATTACH '{_uri}' AS src (TYPE postgres, READ_ONLY);")
         elif source.endswith(".duckdb"):
+            if source.startswith(("http://", "https://", "s3://", "gs://", "gcs://", "r2://")):
+                # Remote .duckdb file (e.g. on S3): httpfs reads it in place via
+                # HTTP range requests. A private bucket also needs credentials,
+                # e.g. con.execute("CREATE SECRET (TYPE s3, ...)") beforehand.
+                con.execute("INSTALL httpfs; LOAD httpfs;")
             con.execute(f"ATTACH '{source}' AS src (READ_ONLY);")
         else:  # a SQLite database file
             con.execute("INSTALL sqlite; LOAD sqlite;")

@@ -19,7 +19,7 @@ uv run marimo edit notebooks/frogwatch_v4.py
 # or as a read-only app:
 uv run marimo run notebooks/frogwatch_v4.py
 ```
-The notebook reads its data source from the `FROGWATCH_DB` env var (default: `postgresql://username@localhost:5432/frogwatch`). It uses a single DuckDB connection that `ATTACH`es the source — a Postgres URI, a SQLite `.db` file, or a `.duckdb` file — and exposes the `persons`/`stations`/`observations` tables as views. Observations are loaded via `dashboard/data.py`, and the dashboard is rendered with marimo-native reactivity and Altair charts.
+The notebook reads its data source from the `FROGWATCH_DB` env var (default: `postgresql://username@localhost:5432/frogwatch`). It uses a single DuckDB connection that `ATTACH`es the source — a Postgres URI, a SQLite `.db` file, or a `.duckdb` file (local path or a remote `http(s)://`/`s3://` URL, read via `httpfs`) — and exposes the `persons`/`stations`/`observations` tables as views. Observations are loaded via `dashboard/data.py`, and the dashboard is rendered with marimo-native reactivity and Altair charts.
 
 **Running the dashboard (Heroku server):**
 ```bash
@@ -54,7 +54,7 @@ Uses `uv` with `uv_build` backend (not setuptools). Python ≥3.9. Two loosely c
 
 ### `notebooks/frogwatch_v4.py` — current dashboard (marimo notebook)
 Marimo notebook that is the active version of the dashboard. It:
-1. Loads data via `dashboard/data.py:load_observations()`, using a DuckDB connection that can `ATTACH` a Postgres URI, a SQLite `.db`, or a `.duckdb` file (selected by the `FROGWATCH_DB` env var).
+1. Loads data via `dashboard/data.py:load_observations()`, using a DuckDB connection that can `ATTACH` a Postgres URI, a SQLite `.db`, or a `.duckdb` file — local or a remote `http(s)://`/`s3://` URL read via `httpfs` (selected by the `FROGWATCH_DB` env var).
 2. Displays an Altair scatter map (`mo.ui.altair_chart`) of SMR stations (lat/lon, sized by observation count).
 3. Cross-filters a species summary table → observer summary table → observations table using marimo reactive cells (no callbacks needed).
 4. Renders year-month and month bar histograms (Altair) that update with each filter step.
@@ -80,7 +80,7 @@ Fieldscope API → frogwatch.py → models → DB (SQLite or Postgres)
 
 ### Database
 - The CLI downloader and Bokeh server use `DATABASE_URL` (Postgres) or a local `.db` file (SQLite).
-- The `frogwatch_v4.py` notebook uses `FROGWATCH_DB`, which accepts a Postgres URI, a SQLite `.db` file, or a `.duckdb` file (all read through DuckDB).
+- The `frogwatch_v4.py` notebook uses `FROGWATCH_DB`, which accepts a Postgres URI, a SQLite `.db` file, or a `.duckdb` file — local or a remote `http(s)://`/`s3://` URL (private buckets need a DuckDB `CREATE SECRET`). All read through DuckDB.
 - Tables: `persons`, `stations`, `observations`.
 - Inserts are idempotent — existing rows are skipped by checking `fs_id`.
 
