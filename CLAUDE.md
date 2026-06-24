@@ -19,7 +19,7 @@ uv run marimo edit notebooks/frogwatch_v3.py
 # or as a read-only app:
 uv run marimo run notebooks/frogwatch_v3.py
 ```
-The notebook connects to Postgres (`postgresql+psycopg2://pollard@localhost:5432/frogwatch`) via the `DATABASE_URL` env var, loads observations via `dashboard/data.py`, and renders an interactive dashboard using marimo-native reactivity and Altair charts.
+The notebook connects to Postgres (`postgresql+psycopg2://username@localhost:5432/frogwatch`) via the `DATABASE_URL` env var, loads observations via `dashboard/data.py`, and renders an interactive dashboard using marimo-native reactivity and Altair charts.
 
 **Running the dashboard (Heroku server):**
 ```bash

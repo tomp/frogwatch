@@ -22,8 +22,6 @@ dependencies = [
     "marimo",
     "altair",
     "altair_tiles",
-    "anthropic>=0.84.0",
-    "pydantic-ai-slim>=0.8.1",
 ]
 
 [project.optional-dependencies]
@@ -32,6 +30,8 @@ dev = [
     "pylint",
     "pytest",
     "black",
+    "anthropic>=0.84.0",
+    "pydantic-ai-slim>=0.8.1",
 ]
 
 [project.scripts]
