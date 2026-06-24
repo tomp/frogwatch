@@ -20,12 +20,30 @@ from pprint import pprint
 import numpy as np
 import pandas as pd
 
+try:
+    import duckdb
+except ImportError:  # duckdb is optional (e.g. not installed on the Heroku deploy)
+    duckdb = None
+
+
+def _read_table(query, client):
+    """Run ``query`` against ``client`` and return a DataFrame.
+
+    ``client`` may be a SQLAlchemy engine/connection, a connection-string, or a
+    DuckDB connection.  DuckDB connections use the native ``.df()`` reader, which
+    avoids pandas' "only supports SQLAlchemy connectable" warning.
+    """
+    if duckdb is not None and isinstance(client, duckdb.DuckDBPyConnection):
+        return client.execute(query).df()
+    return pd.read_sql(query, client)
+
+
 def load_observations(client):
     """Return dataframes representing the stations and observations to display."""
 
-    stations = pd.read_sql('select * from stations', client)
-    people = pd.read_sql('select * from persons', client)
-    observations = pd.read_sql('select * from observations', client)
+    stations = _read_table('select * from stations', client)
+    people = _read_table('select * from persons', client)
+    observations = _read_table('select * from observations', client)
 
     stations.rename(columns={"fs_id":"fs_id_station", "name":"name_station"}, inplace=True)
     people.rename(columns={"fs_id":"fs_id_observer", "name":"name_observer"}, inplace=True)

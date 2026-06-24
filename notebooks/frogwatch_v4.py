@@ -68,8 +68,8 @@ def _():
 
     import altair as alt
     import altair_tiles
+    import duckdb
     import pandas as pd
-    import sqlalchemy
     import marimo as mo
     import xyzservices
 
@@ -83,26 +83,48 @@ def _():
         alt,
         altair_tiles,
         date,
+        duckdb,
         getpass,
         load_observations,
         math,
         mo,
         os,
         pd,
-        sqlalchemy,
         xyzservices,
     )
 
 
 @app.cell
-def _(getpass, load_observations, os, sqlalchemy):
-    _USERNAME = getpass.getuser()
-    _db_url = os.getenv(
-        "DATABASE_URL",
-        f"postgresql+psycopg2://{_USERNAME}@localhost:5432/frogwatch",
+def _(duckdb, getpass, load_observations, os):
+    _TABLES = ("persons", "stations", "observations")
+
+    def _connect(source):
+        """Open a DuckDB connection exposing the frogwatch tables.
+
+        ``source`` may be a Postgres URI, a SQLite ``.db`` file, or a
+        ``.duckdb`` file.  The three tables are exposed as views in the default
+        catalog so ``load_observations`` can query them unqualified.
+        """
+        con = duckdb.connect()
+        if source.startswith(("postgresql://", "postgres://", "postgresql+psycopg2://")):
+            _uri = source.replace("postgresql+psycopg2://", "postgresql://", 1)
+            con.execute("INSTALL postgres; LOAD postgres;")
+            con.execute(f"ATTACH '{_uri}' AS src (TYPE postgres, READ_ONLY);")
+        elif source.endswith(".duckdb"):
+            con.execute(f"ATTACH '{source}' AS src (READ_ONLY);")
+        else:  # a SQLite database file
+            con.execute("INSTALL sqlite; LOAD sqlite;")
+            con.execute(f"ATTACH '{source}' AS src (TYPE sqlite, READ_ONLY);")
+        for _t in _TABLES:
+            con.execute(f"CREATE VIEW {_t} AS SELECT * FROM src.{_t}")
+        return con
+
+    _source = os.getenv(
+        "FROGWATCH_DB",
+        f"postgresql://{getpass.getuser()}@localhost:5432/frogwatch",
     )
-    _engine = sqlalchemy.create_engine(_db_url)
-    station_obs, smr_observations = load_observations(_engine)
+    _con = _connect(_source)
+    station_obs, smr_observations = load_observations(_con)
     return smr_observations, station_obs
 
 
