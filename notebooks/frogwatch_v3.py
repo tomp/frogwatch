@@ -1,6 +1,6 @@
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.23.9"
 app = marimo.App(width="medium")
 
 
@@ -85,10 +85,12 @@ def _():
 
 
 @app.cell
-import getpass
-USERNAME =  getpass.getuser()
 def _(load_observations, os, sqlalchemy):
-    _db_url = os.getenv("DATABASE_URL", f"postgresql+psycopg2://{USERNAME}@localhost:5432/frogwatch")
+    import getpass
+    USERNAME =  getpass.getuser()
+    _db_url = os.getenv(
+        "DATABASE_URL", f"postgresql+psycopg2://{USERNAME}@localhost:5432/frogwatch"
+    )
     _engine = sqlalchemy.create_engine(_db_url)
     station_obs, smr_observations = load_observations(_engine)
     # mo.md(f"Loaded **{len(smr_observations)}** observations from **{len(station_obs)}** stations.")
