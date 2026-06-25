@@ -59,6 +59,16 @@ def _(mo):
 
 
 @app.cell
+def _(getpass, os):
+    data_source = os.getenv(
+        "FROGWATCH_DB",
+        f"postgresql://{getpass.getuser()}@localhost:5432/frogwatch",
+    )    
+    print(f"Data loaded from {data_source}")
+    return (data_source,)
+
+
+@app.cell
 def _():
     import os
     import sys
@@ -95,7 +105,7 @@ def _():
 
 
 @app.cell
-def _(duckdb, getpass, load_observations, os):
+def _(data_source, duckdb, load_observations):
     _TABLES = ("persons", "stations", "observations")
 
     def _connect(source):
@@ -124,11 +134,7 @@ def _(duckdb, getpass, load_observations, os):
             con.execute(f"CREATE VIEW {_t} AS SELECT * FROM src.{_t}")
         return con
 
-    _source = os.getenv(
-        "FROGWATCH_DB",
-        f"postgresql://{getpass.getuser()}@localhost:5432/frogwatch",
-    )
-    _con = _connect(_source)
+    _con = _connect(data_source)
     station_obs, smr_observations = load_observations(_con)
     return smr_observations, station_obs
 
@@ -457,7 +463,8 @@ def _(filtered_obs, mo):
 
 
 @app.cell
-def _(alt, filtered_obs):
+def _(alt, filtered_obs, pd):
+    # Histogram - Observations by Year and Month
     _date_summary = (
         filtered_obs.groupby('obs_year_month')
         .size()
@@ -465,7 +472,40 @@ def _(alt, filtered_obs):
         .rename(columns={'obs_year_month': 'month'})
     )
 
-    date_hist = alt.Chart(_date_summary).mark_bar().encode(
+    _min_year_month = _date_summary['month'].min()
+    _max_year_month = _date_summary['month'].max()
+    print(f"range: {_min_year_month} - {_max_year_month}")
+
+    #_obs_year_month = _date_summary['month'].to_list()
+    #_obs_count = _date_summary['count'].to_list()
+    _obs_count = {ym:count for (idx, (ym, count)) in _date_summary.iterrows()}
+    print(_obs_count)
+
+    def year_month_range(first: str, last: str) -> list[str]:
+        result = []
+        year, month = map(int, first.split('-'))
+        year_month = first
+        while year_month <= last:
+            if month not in (11, 12, 1):
+                result.append(year_month)
+            month += 1
+            if month > 12:
+                year += 1
+                month = 1
+            year_month = f"{year:4d}-{month:02d}"
+        return result
+
+    _all_year_month = year_month_range(_min_year_month, _max_year_month)
+    _all_obs_count = []
+    for _year_month in _all_year_month:
+        _all_obs_count.append(_obs_count.get(_year_month, 0))
+
+    _all_obs_count_df = pd.DataFrame({
+        "month": _all_year_month,
+        "count": _all_obs_count,
+    })
+
+    date_hist = alt.Chart(_all_obs_count_df).mark_bar().encode(
         x=alt.X('month:O', title='Month/Year'),
         y=alt.Y('count:Q', title='Observations'),
         tooltip=[
@@ -477,11 +517,14 @@ def _(alt, filtered_obs):
         width=1000,
         height=160,
     )
+
+    _date_summary
     return (date_hist,)
 
 
 @app.cell
 def _(alt, date, filtered_obs, pd):
+    # Histogram - Observations by Month
     _MONTH = [''] + [date(2000, v, 1).strftime('%b') for v in range(1, 13)]
 
     _month_counts = {m: 0 for m in range(1, 13)}
