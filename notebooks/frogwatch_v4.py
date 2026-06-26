@@ -163,6 +163,9 @@ def _(defaultdict, duckdb, pd, re):
         stations.rename(columns={"fs_id":"fs_id_station", "name":"name_station"}, inplace=True)
         people.rename(columns={"fs_id":"fs_id_observer", "name":"name_observer"}, inplace=True)
 
+        people.loc[people['name_observer'] == '<user 20074>', 'name_observer'] = 'Henry Conrad-Poor'
+        people.loc[people['name_observer'] == '<user 28643>', 'name_observer'] = 'David Hartree'
+
         # Remove sub-species IDs
         observations['species'] = [re.sub(r" \(.*$", "", name) for name in observations['species']]
 
