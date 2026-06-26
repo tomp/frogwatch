@@ -6,7 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""
+    mo.md(rf"""
     ## South Mountain Reservation Frogwatch
 
     This dashboard shows all of the observations made by the South Mountain Reservation Frogwatch team, in a way that makes it easy to drill down on specific frog species, or locations, or observers.
@@ -51,15 +51,18 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
+def _(data_source, mo):
+    mo.md(rf"""
     ### Data loader
+    _Data loaded from **{data_source}**_
     """)
     return
 
 
 @app.cell
 def _(getpass, os):
+    # os.environ["FROGWATCH_DB"] = "https://frogwatch-601662242558-us-east-1-an.s3.us-east-1.amazonaws.com/frogwatch.duckdb"
+    os.environ["FROGWATCH_DB"] = "database/frogwatch.duckdb"
     data_source = os.getenv(
         "FROGWATCH_DB",
         f"postgresql://{getpass.getuser()}@localhost:5432/frogwatch",
@@ -74,7 +77,9 @@ def _():
     import sys
     import math
     import getpass
+    import re
     from datetime import date
+    from collections import defaultdict
 
     import altair as alt
     import altair_tiles
@@ -83,23 +88,18 @@ def _():
     import marimo as mo
     import xyzservices
 
-    _src = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src')
-    if _src not in sys.path:
-        sys.path.insert(0, _src)
-
-    from dashboard.data import load_observations
-
     return (
         alt,
         altair_tiles,
         date,
+        defaultdict,
         duckdb,
         getpass,
-        load_observations,
         math,
         mo,
         os,
         pd,
+        re,
         xyzservices,
     )
 
@@ -137,6 +137,109 @@ def _(data_source, duckdb, load_observations):
     _con = _connect(data_source)
     station_obs, smr_observations = load_observations(_con)
     return smr_observations, station_obs
+
+
+@app.cell
+def _(defaultdict, duckdb, pd, re):
+    def _read_table(query, client):
+        """Run ``query`` against ``client`` and return a DataFrame.
+
+        ``client`` may be a SQLAlchemy engine/connection, a connection-string, or a
+        DuckDB connection.  DuckDB connections use the native ``.df()`` reader, which
+        avoids pandas' "only supports SQLAlchemy connectable" warning.
+        """
+        if isinstance(client, duckdb.DuckDBPyConnection):
+            return client.execute(query).df()
+        return pd.read_sql(query, client)
+
+
+    def load_observations(client):
+        """Return dataframes representing the stations and observations to display."""
+
+        stations = _read_table('select * from stations', client)
+        people = _read_table('select * from persons', client)
+        observations = _read_table('select * from observations', client)
+
+        stations.rename(columns={"fs_id":"fs_id_station", "name":"name_station"}, inplace=True)
+        people.rename(columns={"fs_id":"fs_id_observer", "name":"name_observer"}, inplace=True)
+
+        # Remove sub-species IDs
+        observations['species'] = [re.sub(r" \(.*$", "", name) for name in observations['species']]
+
+        # Replace redundant station IDs
+        smr_station_ids = list(
+            [v for v in stations[stations['name_station'].str.contains('SMR-')].fs_id_station])
+
+        observations.loc[observations['station_id'] == '100353194', 'station_id'] = '100000217'  # Crest Trail Vernal Pool
+        observations.loc[observations['station_id'] == '100012051', 'station_id'] = '100000218'  # Black Willow Pond
+        observations.loc[observations['station_id'] == '4975303', 'station_id'] = '100000219'    # Elmdale Vernal Pools
+
+        observations.loc[observations['station_id'] == '593550', 'station_id'] = '100000218'     # Black Willow Pond
+        observations.loc[observations['station_id'] == '1480244', 'station_id'] = '100000219'    # Elmdale Vernal Pools
+        observations.loc[observations['station_id'] == '605236', 'station_id'] = '100000215'     # Campbell's Pond
+        observations.loc[observations['station_id'] == '100000202', 'station_id'] = '100000215'  # Campbell's Pond
+        smr_station_ids = [v for v in smr_station_ids if v != '100000202']
+
+
+        # De-normalize the station and person data into the observations
+
+        obs_and_name = pd.merge(
+             observations,
+             people[['fs_id_observer', 'name_observer']],
+             how="left", left_on="observer_id", right_on="fs_id_observer")
+
+        obs_full = pd.merge(
+             obs_and_name,
+             stations[['fs_id_station', 'name_station', 'lat', 'lon']],
+             how="left", left_on="station_id", right_on="fs_id_station")
+
+        observations = obs_full[['station_id', 'observer_id', 'start_time',
+                             'species', 'call_intensity', 'temperature', 'beaufort_wind',
+                             'name_observer', 'name_station', 'lat', 'lon']]
+
+        # Convert observation times to datetimes
+        observations = observations.assign(
+            obs_datetime=pd.to_datetime(observations['start_time'], utc=True))
+
+        # Add additional date-related fields, to support time histograms
+        observations['obs_week'] = observations['obs_datetime'].apply(
+            lambda dt: dt.date().isocalendar()[1]) # int 0-52
+        observations['obs_month'] = observations['obs_datetime'].apply(
+            lambda dt: dt.month) # int 1-12
+        observations['obs_year_month'] = observations['obs_datetime'].apply(
+            lambda dt: f"{dt.year:4d}-{dt.month:02d}") # string
+
+        # Select just the observations from SMR
+        smr_observations = observations[
+                observations['station_id'].isin(smr_station_ids) &
+                (observations['obs_datetime'].apply(lambda ts: ts.year) >= 2010)
+        ].sort_values(by=['obs_datetime'], ascending=False)
+
+        station_data = defaultdict(list)
+
+        # Create a dataframe for just the stations found in the SMR observations
+        for station_id, obs_ids in smr_observations.groupby(['station_id']).groups.items():
+            obs = smr_observations.loc[obs_ids[0]]
+            station_data['station_id'].append(station_id)
+            station_data['name'].append(obs["name_station"])
+            station_data['lat'].append(obs['lat'])
+            station_data['lon'].append(obs["lon"])
+            station_data['observations'].append(len(obs_ids))
+
+        # Add stations that are defined, but have no observations
+        for station_id in smr_station_ids:
+            if station_id not in station_data['station_id']:
+                station_data['station_id'].append(station_id)
+                station_data['name'].append(stations.loc[stations['fs_id_station'] == station_id, "name_station"].iloc[0])
+                station_data['lat'].append(stations.loc[stations['fs_id_station'] == station_id, "lat"].iloc[0])
+                station_data['lon'].append(stations.loc[stations['fs_id_station'] == station_id, "lon"].iloc[0])
+                station_data['observations'].append(0)
+
+        station_obs = pd.DataFrame(station_data)
+
+        return station_obs, smr_observations
+
+    return (load_observations,)
 
 
 @app.cell
@@ -471,15 +574,9 @@ def _(alt, filtered_obs, pd):
         .reset_index(name='count')
         .rename(columns={'obs_year_month': 'month'})
     )
-
     _min_year_month = _date_summary['month'].min()
     _max_year_month = _date_summary['month'].max()
-    print(f"range: {_min_year_month} - {_max_year_month}")
-
-    #_obs_year_month = _date_summary['month'].to_list()
-    #_obs_count = _date_summary['count'].to_list()
     _obs_count = {ym:count for (idx, (ym, count)) in _date_summary.iterrows()}
-    print(_obs_count)
 
     def year_month_range(first: str, last: str) -> list[str]:
         result = []
@@ -517,8 +614,6 @@ def _(alt, filtered_obs, pd):
         width=1000,
         height=160,
     )
-
-    _date_summary
     return (date_hist,)
 
 
