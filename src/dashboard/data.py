@@ -13,11 +13,8 @@ Written: May 2021
 Author: Tom Pollard
 """
 import re
-from datetime import datetime, date
 from collections import defaultdict
-from pprint import pprint
 
-import numpy as np
 import pandas as pd
 
 try:
